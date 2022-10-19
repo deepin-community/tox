@@ -1,0 +1,28 @@
+From: Faidon Liambotis <paravoid@debian.org>
+Date: Mon, 21 Jan 2019 12:38:26 +0200
+Subject: Don't build docs with links to external resources
+
+Disable banners and buttons and such in Alabaster's config, and thus
+avoid showing images from AWS/GitHub/Travis-CI. This makes the docs
+viewable offline and avoids privacy leaks when online.
+---
+ docs/conf.py | 4 ++--
+ 1 file changed, 2 insertions(+), 2 deletions(-)
+
+diff --git a/docs/conf.py b/docs/conf.py
+index 05f1017..843a48f 100644
+--- a/docs/conf.py
++++ b/docs/conf.py
+@@ -72,10 +72,10 @@ html_theme_options = {
+     "github_user": "tox-dev",
+     "github_repo": "tox",
+     "description": "standardise testing in Python",
+-    "github_banner": "true",
++    "github_button": "false",
++    "github_banner": "false",
+     "github_type": "star",
+     "travis_button": "false",
+-    "badge_branch": "master",
+     "fixed_sidebar": "false",
+ }
+ html_sidebars = {

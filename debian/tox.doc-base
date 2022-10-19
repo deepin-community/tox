@@ -1,0 +1,11 @@
+Document: tox
+Title: tox README and manual
+Author: Holger Krekel
+Abstract: This manual briefly describes what tox is, and presents some issues
+ you might encounter while using tox, along with some workarounds for how to
+ deal with these issues.
+Section: Programming/Python
+
+Format: HTML
+Index: /usr/share/doc/tox/html/index.html
+Files: /usr/share/doc/tox/html/*

@@ -1,0 +1,347 @@
+tox (3.21.4-1) unstable; urgency=medium
+
+  * New upstream release.
+
+ -- Faidon Liambotis <paravoid@debian.org>  Sat, 06 Feb 2021 23:36:50 +0200
+
+tox (3.21.0-1) unstable; urgency=medium
+
+  [ Faidon Liambotis ]
+  * New upstream version.
+  * General package hygiene:
+    - Update debian/watch to v4.
+    - Bump Standards-Version to 4.5.1, no changes needed.
+    - Bump debhelper compatibility level to 13.
+  * Remove Barry Warsaw from Uploaders (Closes: #970187)
+  * Remove versioned depends on package version before buster.
+  * Refresh Build-Depends/Depends to match upstream's requirements.
+  * Stop relying on setuptools_scm and use upstream's hardcoded version.
+  * Add Rules-Requires-Root: no.
+
+  [ Ondřej Nový ]
+  * Update Maintainer field with new Debian Python Team contact address.
+  * Update Vcs-* fields with new Debian Python Team Salsa layout.
+
+ -- Faidon Liambotis <paravoid@debian.org>  Sun, 10 Jan 2021 20:20:23 +0200
+
+tox (3.15.1-1) unstable; urgency=medium
+
+  * Team upload.
+  * New upstream release
+    - Refresh patches
+  * Bump standards-version to 4.5.0 without further change
+
+ -- Scott Kitterman <scott@kitterman.com>  Mon, 25 May 2020 12:20:36 -0400
+
+tox (3.13.2-2) unstable; urgency=medium
+
+  * Team upload.
+
+  [ Ondřej Nový ]
+  * Bump Standards-Version to 4.4.1.
+
+  [ Scott Kitterman ]
+  * Drop tests for python2, they can no longer be run from just packages in
+    Testing (Closes: #954451).
+
+ -- Scott Kitterman <scott@kitterman.com>  Sun, 22 Mar 2020 12:10:23 -0400
+
+tox (3.13.2-1) unstable; urgency=medium
+
+  [ Faidon Liambotis ]
+  * New upstream release.
+    - Refresh patch alabaster-no-external-links.
+  * Bump debhelper compat level to 12.
+  * Adjust Vcs-* to point to reflect the move from DPMT to PAPT.
+  * Ship a custom-written (and much improved) manpage for tox(1), as well as a
+    manpage for tox-quickstart(1).
+
+  [ Ondřej Nový ]
+  * Bump Standards-Version to 4.4.0.
+
+ -- Faidon Liambotis <paravoid@debian.org>  Wed, 28 Aug 2019 17:39:26 +0300
+
+tox (3.7.0-2) unstable; urgency=high
+
+  * Fix autopkgtest that regressed in the previous version. This runs our
+    smoketest on an isolated temporary directory, without relying on the
+    upstream setup.py. (Closes: #920646)
+
+ -- Faidon Liambotis <paravoid@debian.org>  Sat, 16 Feb 2019 09:57:25 +0200
+
+tox (3.7.0-1) unstable; urgency=medium
+
+  [ Faidon Liambotis ]
+  * New upstream version. (Closes: #887552)
+    - Add Build-Depends on filelock, toml, setuptools-scm and
+      python3-sphinxcontrib.autoprogram.
+    - Overhaul the generation of documentation and among other things, use
+      upstream's manpage.
+  * Update Homepage field to upstream's new home.
+  * Update debian/copyright
+    - Tox has been relicensed to MIT since 1.5.0, so update d/copyright to
+      reflect that.
+    - Relicense debian/* to MIT as well (with Barry's permission)
+    - Add my own copyright to debian/*
+    - Remove references to files that do not exist anymore, and adjust the
+      ones that exist in a different location.
+    - Add more contributors to the upstream source's Copyright
+    - Use https for the Source URL to point to pypi
+  * Bump debhelper compatibility level to 11.
+  * Bump Standards-Version to 4.3.0.
+  * Drop transitional package python-tox, not needed from upgrades from
+    stretch.
+  * Drop all obsolete and unused debian/patches.
+  * Add Built-Using, and set it to ${sphinxdoc:Built-Using}.
+  * Add myself to Uploaders.
+
+  [ Barry Warsaw ]
+  * d/control: Put PAPT in Maintainers and myself in Uploaders.
+
+  [ Ondřej Nový ]
+  * d/control: Set Vcs-* to salsa.debian.org
+  * d/control: Deprecating priority extra as per policy 4.0.1
+  * d/watch: Use https protocol
+  * d/copyright: Use https protocol in Format field
+  * d/control: Remove XS-Testsuite field, not needed anymore
+  * d/control: Remove ancient X-Python3-Version field
+  * Convert git repository from git-dpm to gbp layout
+  * Use 'python3 -m sphinx' instead of sphinx-build for building docs
+
+ -- Faidon Liambotis <paravoid@debian.org>  Sat, 26 Jan 2019 07:44:25 +0200
+
+tox (2.5.0-1) unstable; urgency=medium
+
+  * New upstream release.
+
+ -- Barry Warsaw <barry@debian.org>  Wed, 16 Nov 2016 15:46:50 -0500
+
+tox (2.4.1-1) unstable; urgency=medium
+
+  * New upstream release.
+  * d/control: Bump Standards-Version with no other changes needed.
+
+ -- Barry Warsaw <barry@debian.org>  Mon, 17 Oct 2016 18:53:58 -0400
+
+tox (2.3.1-4) unstable; urgency=medium
+
+  * d/control:
+    - Bump Standards-Version to 3.9.7 with no changes needed.
+    - Update Vcs-* fields to current best-practice values.
+  * d/tests: Simplify DEP-8 tests so that it doesn't try to run the full tox
+    testsuite, but just a simple smoke test.  For mysterious reasons, the
+    full test suite passes in local adt-runs but fails in Ubuntu production.
+
+ -- Barry Warsaw <barry@debian.org>  Tue, 23 Feb 2016 13:52:33 -0500
+
+tox (2.3.1-3) unstable; urgency=medium
+
+  * d/tests/built: Fix upload snafu.
+
+ -- Barry Warsaw <barry@debian.org>  Wed, 17 Feb 2016 16:12:39 -0500
+
+tox (2.3.1-2) unstable; urgency=medium
+
+  * d/control: Add Build-Depends on dh-python.
+  * d/rules:
+    - export PYBUILD_NAME=tox
+    - Add override_dh_install to make sure that the default Python 3
+      version of the library gets installed correctly.
+    - Remove debian/tox.install since that was hardcoded to a specific
+      Python 3 version, which might not exist.
+  * d/tests
+    - control: Update dependencies.
+    - built: export VIRTUALENV_DOWNLOAD=no to really prevent hitting PyPI.
+
+ -- Barry Warsaw <barry@debian.org>  Tue, 16 Feb 2016 12:55:15 -0500
+
+tox (2.3.1-1) unstable; urgency=medium
+
+  * New upstream release.
+
+ -- Barry Warsaw <barry@debian.org>  Mon, 14 Dec 2015 09:51:05 -0500
+
+tox (2.3.0-1) unstable; urgency=medium
+
+  * New upstream release.
+  * d/patches/fix-sphinx-build.patch: Removed; applied upstream.
+  * d/rules: Update override_dh_installdocs locations... again.
+
+ -- Barry Warsaw <barry@debian.org>  Fri, 11 Dec 2015 10:08:04 -0500
+
+tox (2.2.1-1) unstable; urgency=medium
+
+  * New upstream release.
+  * d/patches/fix-sphinx-build.patch: Fix documentation build locations.
+  * d/rules: Update override_dh_installdocs locations.
+  * d/copyright: Added missing licenses.  (Closes: #795216)
+
+ -- Barry Warsaw <barry@debian.org>  Fri, 20 Nov 2015 16:48:04 -0500
+
+tox (2.1.1-2) unstable; urgency=medium
+
+  * d/control:
+    - Rename python-tox binary package to tox.  This now replaces/breaks
+      earlier versions of python-tox.
+    - Reintroduce python-tox binary package as a virtual package.
+  * d/rules: Remove the hack around for bug #751908, and make the package
+    built without failure when multiple versions of Python 3 are supported.
+  * d/python-tox.doc-base -> tox.doc-base
+  * d/python-tox.docs -> tox.docs
+  * d/tox.install: Added to ensure the tox library gets installed correctly.
+
+ -- Barry Warsaw <barry@debian.org>  Thu, 06 Aug 2015 15:39:51 -0400
+
+tox (2.1.1-1) unstable; urgency=medium
+
+  * New upstream release.
+  * d/control:
+    - Added new dependency python3-pluggy to Build-Depends and Depends.
+    - Added python3-pytest-timeout to Build-Depends.
+    - Added python3-setuptools to Depends.  (Closes: #780702)
+    - Bump debhelper to version 9.
+  * d/rules:
+    - Removed http_proxy/https_proxy settings since pybuild adds these
+      automatically.
+    - Disable build-time tests; they can't possibly run.  Rely on DEP-8
+      tests to ensure that tox is built and runs correctly.
+  * d/compat: Bump to version 9.
+
+ -- Barry Warsaw <barry@debian.org>  Mon, 13 Jul 2015 19:33:17 -0400
+
+tox (1.9.2-2) unstable; urgency=medium
+
+  * d/rules: Generate the manpage using known date, for reproducible builds.
+    (Closes: #783757)
+  * d/manpage/conf.py: Update manpage version number.
+
+ -- Barry Warsaw <barry@debian.org>  Wed, 29 Apr 2015 15:37:39 -0400
+
+tox (1.9.2-1) unstable; urgency=medium
+
+  * New upstream release.
+  * d/control: Bump Standards-Version to 3.9.6.
+  * d/watch: Use the pypi.debian.net mirror.
+
+ -- Barry Warsaw <barry@debian.org>  Tue, 28 Apr 2015 13:44:15 -0400
+
+tox (1.8.0-1) unstable; urgency=medium
+
+  * New upstream version.
+
+ -- Barry Warsaw <barry@debian.org>  Fri, 26 Sep 2014 17:07:58 -0400
+
+tox (1.7.2-1) unstable; urgency=medium
+
+  * New upstream release.  (Closes: #758504)
+  * d/control:
+    - Updated Homepage header.  (Closes: #758505)
+    - Move package VCS to git.debian.org (using git-dpm).
+
+ -- Barry Warsaw <barry@debian.org>  Fri, 05 Sep 2014 19:41:00 -0400
+
+tox (1.7.1-3) unstable; urgency=medium
+
+  * d/patches/build-time-tests.patch: Fix DEP-8 related failures.
+  * d/tests/control: Update dependencies.
+
+ -- Barry Warsaw <barry@debian.org>  Sat, 21 Jun 2014 18:44:45 -0400
+
+tox (1.7.1-2) unstable; urgency=medium
+
+  * d/changelog: Fix closed bug number typo.
+    - Closes: #751193
+
+ -- Barry Warsaw <barry@debian.org>  Tue, 17 Jun 2014 16:12:24 -0400
+
+tox (1.7.1-1) unstable; urgency=low
+
+  * New upstream release.
+  * d/control:
+    - Re-enable DEP 8 tests.
+    - Add missing Build-Depend dependencies.
+    - Switch to using Python 3 only.
+    - Add to Depends: python3-py, python3-virtualenv
+    - Add X-Python3-Version header and remove X-Python-Version header.
+    - Bump Standards-Version to 3.9.5 with no other changes necessary.
+    - Fix virtualenv dependency.  Closes: #751193
+  * d/rules:
+    - Switch to Python 3.  Closes: #746236
+    - override_dh_auto_clean removes .tox directory.  Closes: #751803
+  * d/tests
+    - built: Simplify and switch to /bin/sh.
+    - control: Update to use Python 3 dependencies.
+  * d/patches:
+    - hack-requires.patch: Added; use Depends instead.
+    - build-time-tests.patch: Added; skips build-time tests which
+      require an installed `tox` executable.  These are tested by the DEP-8
+      tests.
+    - de-google-ify.patch: Added; fixes privacy-breach-google-adsense
+      lintian errors.
+    - test-fixes.patch: Removed; applied upstream.
+    - no-download.patch: Removed; obsolete.
+    - testenv-deps.patch: Removed; obsolete.
+  * d/python-tox.pyremove: Removed.
+  * d/python-tox.docs: Update.
+
+ -- Barry Warsaw <barry@debian.org>  Tue, 17 Jun 2014 16:05:44 -0400
+
+tox (1.6.0-1) unstable; urgency=low
+
+  * New upstream release.
+    - d/patches/upstream-issue58.patch: Removed; applied upstream.
+    - d/patches/no-download.patch: Refreshed.
+    - d/patches/pytest-dep-version.patch: Removed; no longer necessary.
+    - d/patches/testenv-deps.patch: Added
+    - d/patches/test_fixes.patch: Added
+    - d/patches/no-download.patch, d/copyright, d/manpage/conf.py:
+      Update author email.
+
+ -- Barry Warsaw <barry@debian.org>  Tue, 20 Aug 2013 21:48:05 -0400
+
+tox (1.5.0-1) unstable; urgency=low
+
+  [ Jakub Wilk ]
+  * Use canonical URIs for Vcs-* fields.
+
+  [ Barry Warsaw ]
+  * New upstream release.  (Closes: #702009)
+  * d/control: Update maintainer email.
+  * d/patches/no-download.patch: Refreshed.
+  * d/patches/pytest-dep-version.patch: Disable instafail dependency
+    for now until that package clears NEW.
+  * d/rules: Remove get-orig-source since upstream now releases a .tar.gz.
+  * d/python-tox.docs: README.txt was renamed to README.rst.
+
+ -- Barry Warsaw <barry@debian.org>  Mon, 15 Jul 2013 13:47:06 -0400
+
+tox (1.4.3-1) unstable; urgency=low
+
+  * New upstream release
+  * debian/watch: Update URL since upstream now releases tar.gz files.
+  * debian/rules: No more need for $FAKEHOME.
+  * debian/patches/no-download.patch: Refreshed.
+
+ -- Barry Warsaw <barry@python.org>  Fri, 01 Mar 2013 10:25:03 -0500
+
+tox (1.4.2-2) unstable; urgency=low
+
+  * debian/patches/no-download.patch: Modify tox's own tox.ini file to
+    prevent unintended downloads of dependencies from remote Python
+    package servers.
+  * debian/control: Add B-D for python-pytest.
+  * debian/rules:
+    + Hack $PYTHONPATH to include the system Python's dist-packages when
+      running tox's own tox test.  Without this, the system installed
+      dependencies will not be found (since they aren't downloaded as per
+      above).
+    + Export $http_proxy to additionally prevent unintended internet
+      access by setuptools.
+
+ -- Barry Warsaw <barry@python.org>  Wed, 28 Nov 2012 14:59:23 -0500
+
+tox (1.4.2-1) unstable; urgency=low
+
+  * Initial release. (Closes: #664759)
+
+ -- Barry Warsaw <barry@python.org>  Fri, 09 Nov 2012 18:07:19 -0500

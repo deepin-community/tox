@@ -1,0 +1,35 @@
+#!/bin/sh
+
+export http_proxy=127.0.0.1:9
+export https_proxy=127.0.0.1:9
+
+
+cd $AUTOPKGTEST_TMP
+
+cat > tox.ini <<EOF
+[tox]
+envlist = py3
+skipsdist = True
+
+[testenv]
+commands = {envbindir}/python -m unittest discover -v
+deps =
+
+[testenv:py3]
+basepython = python3
+
+EOF
+
+cat > test_smoke.py <<EOF
+from unittest import TestCase
+
+class TestSimple(TestCase):
+    def setUp(self):
+        self.a = 1
+
+    def test_addition(self):
+        self.assertEqual(self.a + 1, 2)
+
+EOF
+
+tox
