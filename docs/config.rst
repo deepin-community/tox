@@ -38,6 +38,17 @@ Global settings are defined under the ``tox`` section as:
    than this the tool will create an environment and provision it with a version of
    tox that satisfies this under :conf:`provision_tox_env`.
 
+   .. versionchanged:: 3.23.0
+
+   When tox is invoked with the ``--no-provision`` flag,
+   the provision won't be attempted, tox will fail instead.
+
+   .. versionchanged:: 3.27.2
+
+    ``min_version`` has the same meaning and usage as ``minversion``
+    to support a best effort provision of tox 4.
+
+
 .. conf:: requires ^ LIST of PEP-508
 
     .. versionadded:: 3.2.0
@@ -54,6 +65,11 @@ Global settings are defined under the ``tox`` section as:
         requires = tox-pipenv
                    setuptools >= 30.0.0
 
+    .. versionchanged:: 3.23.0
+
+    When tox is invoked with the ``--no-provision`` flag,
+    the provision won't be attempted, tox will fail instead.
+
 .. conf:: provision_tox_env ^ string ^ .tox
 
     .. versionadded:: 3.8.0
@@ -61,11 +77,28 @@ Global settings are defined under the ``tox`` section as:
     Name of the virtual environment used to provision a tox having all dependencies specified
     inside :conf:`requires` and :conf:`minversion`.
 
+    .. versionchanged:: 3.23.0
+
+    When tox is invoked with the ``--no-provision`` flag,
+    the provision won't be attempted, tox will fail instead.
+
+    .. versionchanged:: 3.27.0
+
+    When provisioning, tox will take a lock to ensure exclusive access to the
+    `provision_tox_env` and avoid clobbering by other tox instances.
+
+    .. warning::
+
+      The new virtual environment will only contain dependencies specified by the :conf:`requires` keyword.
+      Any plugin used by the `tox` executable and not specified in `requires` explicitely won't be used for subsequent tasks.
+
 .. conf:: toxworkdir ^ PATH ^ {toxinidir}/.tox
 
    Directory for tox to generate its environments into, will be created if it does not exist.
 
 .. conf:: temp_dir ^ PATH ^ {toxworkdir}/.tmp
+
+   .. versionadded:: 3.5.0
 
    Directory where to put tox temporary files. For example: we create a hard link (if possible,
    otherwise new copy) in this directory for the project package. This ensures tox works correctly
@@ -247,7 +280,7 @@ Complete list of settings that you can put into ``testenv*`` sections:
 
     Commands will execute one by one in sequential fashion until one of them fails (their exit
     code is non-zero) or all of them succeed. The exit code of a command may be ignored (meaning
-    they are always considered successful) by prefixing the command with a dash (``-``) - this is
+    they are always considered successful even if they don't exist) by prefixing the command with a dash (``-``) - this is
     similar to how ``make`` recipe lines work. The outcome of the environment is considered successful
     only if all commands (these + setup + teardown) succeeded (exit code ignored via the
     ``-`` or success exit code value of zero).
@@ -257,6 +290,13 @@ Complete list of settings that you can put into ``testenv*`` sections:
         virtual environment, and only after that outside of it. Therefore ``python``
         translates as the virtual environments ``python`` (having the same runtime version
         as the :conf:`basepython`), and ``pip`` translates as the virtual environments ``pip``.
+
+    :note: Inline scripts can be used, however note these are discovered from the project root directory,
+        and is not influenced by :conf:`changedir` (this only affects the runtime current working directory).
+        To make this behaviour explicit we recommend that you make inline scripts absolute paths by
+        prepending ``{toxinidir}``, instead of ``path/to/my_script`` prefer
+        ``{toxinidir}{/}path{/}to{/}my_script``. If your inline script is platform dependent refer to
+        :ref:`platform-specification` on how to select different script per platform.
 
 .. conf:: commands_pre ^ ARGVLIST
 
@@ -283,6 +323,13 @@ Complete list of settings that you can put into ``testenv*`` sections:
     install.  You should also accept ``{opts}`` if you are using pip -- it will contain index server options
     such as ``--pre`` (configured as ``pip_pre``) and potentially index-options from the
     deprecated :conf:`indexserver` option.
+
+    .. note::
+
+        You can also provide a single arbitrary command to the ``install_command``. Please take care that this command can be
+        executed on the supported operating systems. When executing shell scripts we recommend to not specify the script
+        directly but instead pass it to the appropriate shell as argument (e.g. prefer ``bash script.sh`` over
+        ``script.sh``).
 
 .. conf:: list_dependencies_command ^ ARGV ^ python -m pip freeze
 
@@ -345,7 +392,7 @@ Complete list of settings that you can put into ``testenv*`` sections:
 
 .. conf:: changedir ^ PATH ^ {toxinidir}
 
-    Change to this working directory when executing the test command.
+    Change the current working directory when executing the test command.
 
     .. note::
 
@@ -353,7 +400,7 @@ Complete list of settings that you can put into ``testenv*`` sections:
 
 .. conf:: deps ^ MULTI-LINE-LIST
 
-    Environment dependencies - installed into the environment ((see :conf:`install_command`) prior
+    Environment dependencies - installed into the environment (see :conf:`install_command`) prior
     to project after environment creation. One dependency (a file, a URL or a package name) per
     line. Must be PEP-508_ compliant. All installer commands are executed using the toxinidir_ as the
     current working directory.
@@ -429,15 +476,17 @@ Complete list of settings that you can put into ``testenv*`` sections:
     ``A`` will pass both ``A`` and ``a``.
 
     Some variables are always passed through to ensure the basic functionality
-    of standard library functions or tooling like pip:
+    of standard library functions or tooling like pip.
+    This is also not case sensitive on all platforms except Windows:
 
     * passed through on all platforms: ``CURL_CA_BUNDLE``, ``PATH``,
       ``LANG``, ``LANGUAGE``,
       ``LD_LIBRARY_PATH``, ``PIP_INDEX_URL``, ``PIP_EXTRA_INDEX_URL``,
       ``REQUESTS_CA_BUNDLE``, ``SSL_CERT_FILE``,
       ``HTTP_PROXY``, ``HTTPS_PROXY``, ``NO_PROXY``
-    * Windows: ``SYSTEMDRIVE``, ``SYSTEMROOT``, ``PATHEXT``, ``TEMP``, ``TMP``
-       ``NUMBER_OF_PROCESSORS``, ``USERPROFILE``, ``MSYSTEM``
+    * Windows: ``APPDATA``, ``SYSTEMDRIVE``, ``SYSTEMROOT``, ``PATHEXT``, ``TEMP``, ``TMP``
+       ``NUMBER_OF_PROCESSORS``, ``USERPROFILE``, ``MSYSTEM``,
+       ``PROGRAMFILES``, ``PROGRAMFILES(X86)``, ``PROGRAMDATA``
     * Others (e.g. UNIX, macOS): ``TMPDIR``
 
     You can override these variables with the ``setenv`` option.
@@ -522,9 +571,11 @@ Complete list of settings that you can put into ``testenv*`` sections:
 
     .. versionadded:: 0.9
 
-    (DEPRECATED, will be removed in a future version) Multi-line ``name =
-    URL`` definitions of python package servers.  Dependencies can
-    specify using a specified index server through the
+    (DEPRECATED, will be removed in a future version) Use :conf:`setenv`
+    to configure PIP_INDEX_URL environment variable, see below.
+
+    Multi-line ``name = URL`` definitions of python package servers.
+    You can specify an alternative index server for dependencies by applying the
     ``:indexservername:depname`` pattern.  The ``default`` indexserver
     definition determines where unscoped dependencies and the sdist install
     installs from.  Example:
@@ -537,6 +588,17 @@ Complete list of settings that you can put into ``testenv*`` sections:
 
     will make tox install all dependencies from this PyPI index server
     (including when installing the project sdist package).
+
+    The recommended way to set a custom index server URL is to use :conf:`setenv`:
+
+    .. code-block:: ini
+
+        [testenv]
+        setenv =
+            PIP_INDEX_URL = {env:PIP_INDEX_URL:https://pypi.org/simple/}
+
+    This will ensure the desired index server gets used for virtual environment
+    creation and allow overriding the index server URL with an environment variable.
 
 .. conf:: envdir ^ PATH ^ {toxworkdir}/{envname}
 
@@ -552,7 +614,9 @@ Complete list of settings that you can put into ``testenv*`` sections:
     Install the current package in development mode with "setup.py
     develop" instead of installing from the ``sdist`` package. (This
     uses pip's ``-e`` option, so should be avoided if you've specified a
-    custom :conf:`install_command` that does not support ``-e``).
+    custom :conf:`install_command` that does not support ``-e``). Note that
+    changes to the build/install process (including changes in dependencies)
+    are only detected when using setuptools with setup.py.
 
 .. conf:: skip_install ^ true|false ^ false
 
@@ -608,7 +672,7 @@ Complete list of settings that you can put into ``testenv*`` sections:
     .. versionadded:: 3.15.2
 
     When an interrupt is sent via Ctrl+C or the tox process is killed with a SIGTERM,
-    a SIGINT is sent to all foreground processes. The :conf:``suicide_timeout`` gives
+    a SIGINT is sent to all foreground processes. The :conf:`suicide_timeout` gives
     the running process time to cleanup and exit before receiving (in some cases, a duplicate) SIGINT from
     tox.
 
@@ -617,17 +681,17 @@ Complete list of settings that you can put into ``testenv*`` sections:
     .. versionadded:: 3.15.0
 
     When tox is interrupted, it propagates the signal to the child process
-    after :conf:``suicide_timeout`` seconds. If the process still hasn't exited
-    after :conf:``interrupt_timeout`` seconds, its sends a SIGTERM.
+    after :conf:`suicide_timeout` seconds. If the process still hasn't exited
+    after :conf:`interrupt_timeout` seconds, its sends a SIGTERM.
 
 .. conf:: terminate_timeout ^ float ^ 0.2
 
     .. versionadded:: 3.15.0
 
-    When tox is interrupted, after waiting :conf:``interrupt_timeout`` seconds,
+    When tox is interrupted, after waiting :conf:`interrupt_timeout` seconds,
     it propagates the signal to the child process, waits
-    :conf:``interrupt_timeout`` seconds, sends it a SIGTERM, waits
-    :conf:``terminate_timeout`` seconds, and sends it a SIGKILL if it hasn't
+    :conf:`interrupt_timeout` seconds, sends it a SIGTERM, waits
+    :conf:`terminate_timeout` seconds, and sends it a SIGKILL if it hasn't
     exited.
 
 Substitutions
@@ -661,6 +725,11 @@ Globally available substitutions
 ``{toxworkdir}``
     the directory where virtual environments are created and sub directories
     for packaging reside.
+
+``{temp_dir}``
+    the directory where tox temporary files live.
+
+    .. versionadded:: 3.16.1
 
 ``{homedir}``
     the user-home directory path.
@@ -746,6 +815,8 @@ the above example is roughly equivalent to
 
 Interactive shell substitution
 ++++++++++++++++++++++++++++++
+
+.. versionadded:: 3.4.0
 
 It's possible to inject a config value only when tox is running in interactive shell (standard input)::
 
@@ -1046,9 +1117,9 @@ Handle interpreter directives with long lengths
 For systems supporting executable text files (scripts with a shebang), the
 system will attempt to parse the interpreter directive to determine the program
 to execute on the target text file. When ``tox`` prepares a virtual environment
-in a file container which has a large length (e.x. using Jenkins Pipelines), the
+in a file container which has a large length (e.g. using Jenkins Pipelines), the
 system might not be able to invoke shebang scripts which define interpreters
-beyond system limits (e.x. Linux as a limit of 128; ``BINPRM_BUF_SIZE``). To
+beyond system limits (e.g. Linux has a limit of 128; ``BINPRM_BUF_SIZE``). To
 workaround an environment which suffers from an interpreter directive limit, a
 user can bypass the system's interpreter parser by defining the
 ``TOX_LIMITED_SHEBANG`` environment variable before invoking ``tox``::
@@ -1058,8 +1129,22 @@ user can bypass the system's interpreter parser by defining the
 When the workaround is enabled, all tox-invoked text file executables will have
 their interpreter directive parsed by and explicitly executed by ``tox``.
 
+Environment variables
+---------------------
+tox will treat the following environment variables:
+
+- ``TOX_DISCOVER`` for python discovery first try the python executables under these paths
+- ``TOXENV`` see :conf:`envlist`.
+- ``TOX_LIMITED_SHEBANG`` see :ref:`long interpreter directives`.
+- ``TOX_PARALLEL_NO_SPINNER`` see :ref:`parallel_mode`.
+- ``_TOX_PARALLEL_ENV`` lets tox know that it is invoked in the parallel mode.
+- ``TOX_PROVISION`` is only intended to be used internally.
+- ``TOX_REPORTER_TIMESTAMP`` enables showing for each output line its delta since the tox startup when set to ``1``.
+- ``TOX_SKIP_ENV`` see :conf:`envlist`.
+- ``TOX_TESTENV_PASSENV`` see :conf:`passenv`.
+
 Injected environment variables
-------------------------------
+++++++++++++++++++++++++++++++
 tox will inject the following environment variables that you can use to test that your command is running within tox:
 
 .. versionadded:: 3.4

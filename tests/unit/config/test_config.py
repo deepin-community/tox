@@ -1,12 +1,15 @@
+# coding=utf-8
 import os
 import re
 import sys
+import warnings
 from textwrap import dedent
 
 import py
 import pytest
 from pluggy import PluginManager
 from six import PY2
+from virtualenv.info import IS_PYPY
 
 import tox
 from tox.config import (
@@ -377,6 +380,16 @@ class TestConfigPackage:
             config = newconfig([], "")
         assert config.setupdir.realpath() == tmpdir.realpath()
         assert config.toxworkdir.realpath() == tmpdir.join(".tox").realpath()
+
+    def test_defaults_isolated_build(self, newconfig):
+        config = newconfig(
+            [],
+            """
+            [tox]
+            isolated_build = true
+        """,
+        )
+        assert "python" in config.envconfigs
 
     def test_project_paths(self, tmpdir, newconfig):
         config = newconfig(
@@ -1452,6 +1465,7 @@ class TestConfigTestEnv:
         assert envconfig.envpython == envconfig.envbindir.join("python")
 
     @pytest.mark.parametrize("bp", ["jython", "pypy", "pypy3"])
+    @pytest.mark.skipif(IS_PYPY, reason="fails on pypy")
     def test_envbindir_jython(self, newconfig, bp):
         config = newconfig(
             """
@@ -1468,12 +1482,31 @@ class TestConfigTestEnv:
         if bp == "jython":
             assert envconfig.envpython == envconfig.envbindir.join(bp)
 
+    @pytest.mark.skipif(tox.INFO.IS_PYPY, reason="only applies to CPython")
+    @pytest.mark.parametrize("sep, bindir", [("\\", "Scripts"), ("/", "bin")])
+    def test_envbindir_win(self, newconfig, monkeypatch, sep, bindir):
+        monkeypatch.setattr(tox.INFO, "IS_WIN", True)
+        config = newconfig(
+            """
+            [testenv]
+            basepython=python
+        """,
+        )
+        assert len(config.envconfigs) == 1
+        envconfig = config.envconfigs["python"]
+        envconfig.python_info.os_sep = sep  # force os.sep result
+        # on win32 with msys2, virtualenv uses "bin" for python
+        assert envconfig.envbindir.basename == bindir
+        assert envconfig.envpython == envconfig.envbindir.join("python")
+
     @pytest.mark.parametrize("plat", ["win32", "linux2"])
     def test_passenv_as_multiline_list(self, newconfig, monkeypatch, plat):
         monkeypatch.setattr(tox.INFO, "IS_WIN", plat == "win32")
         monkeypatch.setenv("A123A", "a")
         monkeypatch.setenv("A123B", "b")
         monkeypatch.setenv("BX23", "0")
+        if plat == "linux2":
+            monkeypatch.setenv("http_proxy", "c")
         config = newconfig(
             """
             [testenv]
@@ -1486,6 +1519,7 @@ class TestConfigTestEnv:
         assert len(config.envconfigs) == 1
         envconfig = config.envconfigs["python"]
         if plat == "win32":
+            assert "APPDATA" in envconfig.passenv
             assert "PATHEXT" in envconfig.passenv
             assert "SYSTEMDRIVE" in envconfig.passenv
             assert "SYSTEMROOT" in envconfig.passenv
@@ -1496,8 +1530,14 @@ class TestConfigTestEnv:
             assert "PROCESSOR_ARCHITECTURE" in envconfig.passenv
             assert "USERPROFILE" in envconfig.passenv
             assert "MSYSTEM" in envconfig.passenv
+            assert "PROGRAMFILES" in envconfig.passenv
+            assert "PROGRAMFILES(X86)" in envconfig.passenv
+            assert "PROGRAMDATA" in envconfig.passenv
         else:
             assert "TMPDIR" in envconfig.passenv
+            if sys.platform != "win32":
+                # this cannot be emulated on win - it doesn't support lowercase env vars
+                assert "http_proxy" in envconfig.passenv
         assert "CURL_CA_BUNDLE" in envconfig.passenv
         assert "PATH" in envconfig.passenv
         assert "PIP_INDEX_URL" in envconfig.passenv
@@ -1532,11 +1572,15 @@ class TestConfigTestEnv:
         assert len(config.envconfigs) == 1
         envconfig = config.envconfigs["python"]
         if plat == "win32":
+            assert "APPDATA" in envconfig.passenv
             assert "PATHEXT" in envconfig.passenv
             assert "SYSTEMDRIVE" in envconfig.passenv
             assert "SYSTEMROOT" in envconfig.passenv
             assert "TEMP" in envconfig.passenv
             assert "TMP" in envconfig.passenv
+            assert "PROGRAMFILES" in envconfig.passenv
+            assert "PROGRAMFILES(X86)" in envconfig.passenv
+            assert "PROGRAMDATA" in envconfig.passenv
         else:
             assert "TMPDIR" in envconfig.passenv
         assert "PATH" in envconfig.passenv
@@ -1938,7 +1982,7 @@ class TestConfigTestEnv:
                 frob{{env:ENV_VAR:>1.0,<2.0}}
         """.format(
             envlist=",".join(envlist),
-            deps="\n" + "\n".join([" " * 17 + d for d in deps]),
+            deps="\n" + "\n".join(" " * 17 + d for d in deps),
         )
         conf = newconfig([], inisource).envconfigs["py27"]
         packages = [dep.name for dep in conf.deps]
@@ -2366,24 +2410,23 @@ class TestConfigTestEnv:
         for name, config in configs.items():
             assert config.basepython == "python{}.{}".format(name[2], name[3])
 
+    @pytest.mark.skipif(IS_PYPY, reason="fails on pypy")
     def test_default_factors_conflict(self, newconfig, capsys):
         with pytest.warns(UserWarning, match=r"conflicting basepython .*"):
-            exe = "pypy3" if tox.INFO.IS_PYPY else "python3"
             env = "pypy27" if tox.INFO.IS_PYPY else "py27"
             config = newconfig(
                 """\
                 [testenv]
-                basepython={}
+                basepython=python3
                 [testenv:{}]
                 commands = python --version
                 """.format(
-                    exe,
-                    env,
+                    env
                 ),
             )
         assert len(config.envconfigs) == 1
         envconfig = config.envconfigs[env]
-        assert envconfig.basepython == exe
+        assert envconfig.basepython == "python3"
 
     def test_default_factors_conflict_lying_name(
         self,
@@ -2427,7 +2470,8 @@ class TestConfigTestEnv:
 
         major, minor = sys.version_info[0:2]
 
-        with pytest.warns(None) as lying:
+        with warnings.catch_warnings():
+            warnings.simplefilter("error")
             config = newconfig(
                 """
                 [testenv:py{0}]
@@ -2441,9 +2485,9 @@ class TestConfigTestEnv:
 
         env_config = config.envconfigs["py{}".format(major)]
         assert env_config.basepython == "python{}.{}".format(major, minor - 1)
-        assert len(lying) == 0, "\n".join(repr(r.message) for r in lying)
 
-        with pytest.warns(None) as truthful:
+        with warnings.catch_warnings():
+            warnings.simplefilter("error")
             config = newconfig(
                 """
                 [testenv:py{0}]
@@ -2457,10 +2501,10 @@ class TestConfigTestEnv:
 
         env_config = config.envconfigs["py{}".format(major)]
         assert env_config.basepython == "python{}.{}".format(major, minor)
-        assert len(truthful) == 0, "\n".join(repr(r.message) for r in truthful)
 
     def test_default_factors_conflict_ignore(self, newconfig, capsys):
-        with pytest.warns(None) as record:
+        with warnings.catch_warnings():
+            warnings.simplefilter("error")
             config = newconfig(
                 """
                 [tox]
@@ -2474,7 +2518,6 @@ class TestConfigTestEnv:
         assert len(config.envconfigs) == 1
         envconfig = config.envconfigs["py27"]
         assert envconfig.basepython == "python2.7"
-        assert len(record) == 0, "\n".join(repr(r.message) for r in record)
 
     def test_factors_in_boolean(self, newconfig):
         inisource = """
@@ -3557,6 +3600,9 @@ def test_config_via_pyproject_legacy(initproj):
         "config_via_pyproject_legacy-0.5",
         filedefs={
             "pyproject.toml": '''
+                [project]
+                description = "Factory ⸻ A code generator 🏭"
+                authors = [{name = "Łukasz Langa"}]
                 [tool.tox]
                 legacy_tox_ini = """
                 [tox]

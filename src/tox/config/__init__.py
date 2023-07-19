@@ -1,7 +1,9 @@
 from __future__ import print_function
 
 import argparse
+import io
 import itertools
+import json
 import os
 import random
 import re
@@ -18,7 +20,24 @@ from threading import Thread
 import pluggy
 import py
 import six
-import toml
+
+if sys.version_info >= (3, 11):
+    import tomllib as toml_loader
+
+    toml_mode = "rb"
+    toml_encoding = None
+elif sys.version_info >= (3, 7):
+    import tomli as toml_loader
+
+    toml_mode = "rb"
+    toml_encoding = None
+else:
+    import toml as toml_loader
+
+    toml_mode = "r"
+    toml_encoding = "UTF-8"
+
+
 from packaging import requirements
 from packaging.utils import canonicalize_name
 from packaging.version import Version
@@ -42,9 +61,9 @@ from .parallel import ENV_VAR_KEY_PUBLIC as PARALLEL_ENV_VAR_KEY_PUBLIC
 from .parallel import add_parallel_config, add_parallel_flags
 from .reporter import add_verbosity_commands
 
-try:
+if sys.version_info >= (3, 3):
     from shlex import quote as shlex_quote
-except ImportError:
+else:
     from pipes import quote as shlex_quote
 
 
@@ -59,9 +78,9 @@ SUICIDE_TIMEOUT = 0.0
 INTERRUPT_TIMEOUT = 0.3
 TERMINATE_TIMEOUT = 0.2
 
-_FACTOR_LINE_PATTERN = re.compile(r"^([\w{}\.!,-]+)\:\s+(.+)")
-_ENVSTR_SPLIT_PATTERN = re.compile(r"((?:\{[^}]+\})+)|,")
-_ENVSTR_EXPAND_PATTERN = re.compile(r"\{([^}]+)\}")
+_FACTOR_LINE_PATTERN = re.compile(r"^([\w{}.!,-]+):\s+(.+)")
+_ENVSTR_SPLIT_PATTERN = re.compile(r"((?:{[^}]+})+)|,")
+_ENVSTR_EXPAND_PATTERN = re.compile(r"{([^}]+)}")
 _WHITESPACE_PATTERN = re.compile(r"\s+")
 
 
@@ -302,9 +321,9 @@ def parseconfig(args, plugins=()):
 
 
 def get_py_project_toml(path):
-    with open(str(path)) as file_handler:
-        config_data = toml.load(file_handler)
-        return config_data
+    with io.open(str(path), mode=toml_mode, encoding=toml_encoding) as file_handler:
+        config_data = toml_loader.load(file_handler)
+    return config_data
 
 
 def propose_configs(cli_config_file):
@@ -572,6 +591,16 @@ def tox_addoption(parser):
         action="store_true",
         help="override alwayscopy setting to True in all envs",
     )
+    parser.add_argument(
+        "--no-provision",
+        action="store",
+        nargs="?",
+        default=False,
+        const=True,
+        metavar="REQUIRES_JSON",
+        help="do not perform provision, but fail and if a path was provided "
+        "write provision metadata as JSON to it",
+    )
 
     cli_skip_missing_interpreter(parser)
     parser.add_argument("--workdir", metavar="PATH", help="tox working directory")
@@ -583,7 +612,10 @@ def tox_addoption(parser):
     )
 
     def _set_envdir_from_devenv(testenv_config, value):
-        if testenv_config.config.option.devenv is not None:
+        if (
+            testenv_config.config.option.devenv is not None
+            and testenv_config.envname != testenv_config.config.provision_tox_env
+        ):
             return py.path.local(testenv_config.config.option.devenv)
         else:
             return value
@@ -755,6 +787,7 @@ def tox_addoption(parser):
             "CURL_CA_BUNDLE",
             "LANG",
             "LANGUAGE",
+            "LC_ALL",
             "LD_LIBRARY_PATH",
             "PATH",
             "PIP_INDEX_URL",
@@ -780,6 +813,7 @@ def tox_addoption(parser):
         # but this leads to very long paths when run with jenkins
         # so we just pass it on by default for now.
         if tox.INFO.IS_WIN:
+            passenv.add("APPDATA")  # needed to find user site-packages location
             passenv.add("SYSTEMDRIVE")  # needed for pip6
             passenv.add("SYSTEMROOT")  # needed for python's crypto module
             passenv.add("PATHEXT")  # needed for discovering executables
@@ -791,8 +825,16 @@ def tox_addoption(parser):
             passenv.add("PROCESSOR_ARCHITECTURE")  # platform.machine()
             passenv.add("USERPROFILE")  # needed for `os.path.expanduser()`
             passenv.add("MSYSTEM")  # fixes #429
+            # PROGRAM* required for compiler tool discovery #2382
+            passenv.add("PROGRAMFILES")
+            passenv.add("PROGRAMFILES(X86)")
+            passenv.add("PROGRAMDATA")
         else:
             passenv.add("TMPDIR")
+
+            # add non-uppercased variables to passenv if present (only necessary for UNIX)
+            passenv.update(name for name in os.environ if name.upper() in passenv)
+
         for spec in value:
             for name in os.environ:
                 if fnmatchcase(name.upper(), spec.upper()):
@@ -1042,6 +1084,11 @@ class TestenvConfig:
             or tox.INFO.IS_WIN is False
             or self.python_info.implementation == "Jython"
             or (
+                # this combination is MSYS2
+                tox.INFO.IS_WIN
+                and self.python_info.os_sep == "/"
+            )
+            or (
                 tox.INFO.IS_WIN
                 and self.python_info.implementation == "PyPy"
                 and self.python_info.extra_version_info < (7, 3, 1)
@@ -1059,7 +1106,7 @@ class TestenvConfig:
         return self.get_envpython()
 
     def get_envpython(self):
-        """ path to python/jython executable. """
+        """path to python/jython executable."""
         if "jython" in str(self.basepython):
             name = "jython"
         else:
@@ -1295,11 +1342,15 @@ class ParseIni(object):
             feedback("--devenv requires only a single -e", sysexit=True)
 
     def handle_provision(self, config, reader):
-        requires_list = reader.getlist("requires")
+        config.requires = reader.getlist("requires")
         config.minversion = reader.getstring("minversion", None)
+        # tox 4 prefers the min_version name of this option.
+        # We check is as well in case the config is intended for tox 4.
+        # This allows to make a *best effort* attempt to provision tox 4 from tox 3.
+        config.minversion = config.minversion or reader.getstring("min_version", None)
         config.provision_tox_env = name = reader.getstring("provision_tox_env", ".tox")
         min_version = "tox >= {}".format(config.minversion or Version(tox.__version__).public)
-        deps = self.ensure_requires_satisfied(config, requires_list, min_version)
+        deps = self.ensure_requires_satisfied(config, config.requires, min_version)
         if config.run_provision:
             section_name = "testenv:{}".format(name)
             if section_name not in self._cfg.sections:
@@ -1318,8 +1369,8 @@ class ParseIni(object):
         # raise on unknown args
         self.config._parser.parse_cli(args=self.config.args, strict=True)
 
-    @staticmethod
-    def ensure_requires_satisfied(config, requires, min_version):
+    @classmethod
+    def ensure_requires_satisfied(cls, config, requires, min_version):
         missing_requirements = []
         failed_to_parse = False
         deps = []
@@ -1346,11 +1397,32 @@ class ParseIni(object):
                 missing_requirements.append(str(requirements.Requirement(require)))
         if failed_to_parse:
             raise tox.exception.BadRequirement()
+        if config.option.no_provision and missing_requirements:
+            msg = "provisioning explicitly disabled within {}, but missing {}"
+            if config.option.no_provision is not True:  # it's a path
+                msg += " and wrote to {}"
+                cls.write_requires_to_json_file(config)
+            raise tox.exception.Error(
+                msg.format(sys.executable, missing_requirements, config.option.no_provision)
+            )
         if WITHIN_PROVISION and missing_requirements:
             msg = "break infinite loop provisioning within {} missing {}"
             raise tox.exception.Error(msg.format(sys.executable, missing_requirements))
         config.run_provision = bool(len(missing_requirements))
         return deps
+
+    @staticmethod
+    def write_requires_to_json_file(config):
+        requires_dict = {
+            "minversion": config.minversion,
+            "requires": config.requires,
+        }
+        try:
+            with open(config.option.no_provision, "w", encoding="utf-8") as outfile:
+                json.dump(requires_dict, outfile, indent=4)
+        except TypeError:  # Python 2
+            with open(config.option.no_provision, "w") as outfile:
+                json.dump(requires_dict, outfile, indent=4, encoding="utf-8")
 
     def parse_build_isolation(self, config, reader):
         config.isolated_build = reader.getbool("isolated_build", False)
@@ -1374,7 +1446,7 @@ class ParseIni(object):
         factors = set()
         if section in self._cfg:
             for _, value in self._cfg[section].items():
-                exprs = re.findall(r"^([\w{}\.!,-]+)\:\s+", value, re.M)
+                exprs = re.findall(r"^([\w{}.!,-]+):\s+", value, re.M)
                 factors.update(*mapcat(_split_factor_expr_all, exprs))
         return factors
 
@@ -1433,7 +1505,7 @@ class ParseIni(object):
                 reader.addsubstitutions(**{env_attr.name: res})
         return tc
 
-    def _getallenvs(self, reader, extra_env_list=None):
+    def _getallenvs(self, reader, config, extra_env_list=None):
         extra_env_list = extra_env_list or []
         env_str = reader.getstring("envlist", replace=False)
         env_list = _split_env(env_str)
@@ -1442,9 +1514,12 @@ class ParseIni(object):
                 env_list.append(env)
 
         all_envs = OrderedDict((i, None) for i in env_list)
+        package_env = config.isolated_build_env if config.isolated_build is True else None
         for section in self._cfg:
             if section.name.startswith(testenvprefix):
-                all_envs[section.name[len(testenvprefix) :]] = None
+                section_env = section.name[len(testenvprefix) :]
+                if section_env != package_env:
+                    all_envs[section_env] = None
         if not all_envs:
             all_envs["python"] = None
         return list(all_envs.keys())
@@ -1456,10 +1531,11 @@ class ParseIni(object):
 
         env_list = []
         envlist_explicit = False
-        if (from_option and "ALL" in from_option) or (
-            not from_option and from_environ and "ALL" in from_environ.split(",")
-        ):
-            all_envs = self._getallenvs(reader)
+        if (
+            (from_option and "ALL" in from_option)
+            or (not from_option and from_environ and "ALL" in from_environ.split(","))
+        ) and PARALLEL_ENV_VAR_KEY_PRIVATE not in os.environ:
+            all_envs = self._getallenvs(reader, config)
         else:
             candidates = (
                 (os.environ.get(PARALLEL_ENV_VAR_KEY_PRIVATE), True),
@@ -1470,7 +1546,7 @@ class ParseIni(object):
             )
             env_str, envlist_explicit = next(((i, e) for i, e in candidates if i), ([], False))
             env_list = _split_env(env_str)
-            all_envs = self._getallenvs(reader, env_list)
+            all_envs = self._getallenvs(reader, config, env_list)
 
         if not env_list:
             env_list = all_envs
@@ -1481,9 +1557,6 @@ class ParseIni(object):
             raise tox.exception.ConfigError(msg)
 
         package_env = config.isolated_build_env
-        if config.isolated_build is True and package_env in all_envs:
-            all_envs.remove(package_env)
-
         if config.isolated_build is True and package_env in env_list:
             msg = "isolated_build_env {} cannot be part of envlist".format(package_env)
             raise tox.exception.ConfigError(msg)
@@ -1498,7 +1571,7 @@ class ParseIni(object):
         The parser will see it as two different sections: [testenv:py36-cov], [testenv:py37-cov]
 
         """
-        factor_re = re.compile(r"\{\s*([\w\s,-]+)\s*\}")
+        factor_re = re.compile(r"{\s*([\w\s,-]+)\s*}")
         split_re = re.compile(r"\s*,\s*")
         to_remove = set()
         for section in list(config.sections):
@@ -1514,12 +1587,12 @@ class ParseIni(object):
 
 
 def _split_env(env):
-    """if handed a list, action="append" was used for -e """
+    """if handed a list, action="append" was used for -e"""
     if env is None:
         return []
     if not isinstance(env, list):
         env = [e.split("#", 1)[0].strip() for e in env.split("\n")]
-        env = ",".join([e for e in env if e])
+        env = ",".join(e for e in env if e)
         env = [env]
     return mapcat(_expand_envstr, env)
 
@@ -1708,7 +1781,7 @@ class SectionReader:
     def getargv_install_command(self, name, default="", replace=True):
         s = self.getstring(name, default, replace=False)
         if not s:
-            # This occurs when factors are used, and a testenv doesnt have
+            # This occurs when factors are used, and a testenv doesn't have
             # a factorised value for install_command, most commonly occurring
             # if setting platform is also used.
             # An empty value causes error install_command must contain '{packages}'.
@@ -1751,7 +1824,7 @@ class SectionReader:
             if sys.platform.startswith("win"):
                 posargs_string = list2cmdline([x for x in posargs if x])
             else:
-                posargs_string = " ".join([shlex_quote(x) for x in posargs if x])
+                posargs_string = " ".join(shlex_quote(x) for x in posargs if x)
             return posargs_string
         else:
             return default or ""

@@ -9,10 +9,12 @@ import tox
 from tox.interpreters import NoInterpreterInfo
 from tox.session.commands.run.sequential import installpkg, runtestenv
 from tox.venv import (
+    MAXINTERP,
     CreationConfig,
     VirtualEnv,
     getdigest,
     prepend_shebang_interpreter,
+    tox_runenvreport,
     tox_testenv_create,
     tox_testenv_install_deps,
 )
@@ -69,6 +71,7 @@ def test_create(mocksession, newconfig):
     assert not venv.path.check()
     with mocksession.newaction(venv.name, "getenv") as action:
         tox_testenv_create(action=action, venv=venv)
+        venv.just_created = True
     pcalls = mocksession._pcalls
     assert len(pcalls) >= 1
     args = pcalls[0].args
@@ -134,6 +137,7 @@ def test_create_sitepackages(mocksession, newconfig):
     venv = mocksession.getvenv("site")
     with mocksession.newaction(venv.name, "getenv") as action:
         tox_testenv_create(action=action, venv=venv)
+        venv.just_created = True
     pcalls = mocksession._pcalls
     assert len(pcalls) >= 1
     args = pcalls[0].args
@@ -143,6 +147,7 @@ def test_create_sitepackages(mocksession, newconfig):
     venv = mocksession.getvenv("nosite")
     with mocksession.newaction(venv.name, "getenv") as action:
         tox_testenv_create(action=action, venv=venv)
+        venv.just_created = True
     pcalls = mocksession._pcalls
     assert len(pcalls) >= 1
     args = pcalls[0].args
@@ -164,6 +169,7 @@ def test_install_deps_wildcard(newmocksession):
     venv = mocksession.getvenv("py123")
     with mocksession.newaction(venv.name, "getenv") as action:
         tox_testenv_create(action=action, venv=venv)
+        venv.just_created = True
         pcalls = mocksession._pcalls
         assert len(pcalls) == 1
         distshare = venv.envconfig.config.distshare
@@ -200,6 +206,7 @@ def test_install_deps_indexserver(newmocksession):
     venv = mocksession.getvenv("py123")
     with mocksession.newaction(venv.name, "getenv") as action:
         tox_testenv_create(action=action, venv=venv)
+        venv.just_created = True
         pcalls = mocksession._pcalls
         assert len(pcalls) == 1
         pcalls[:] = []
@@ -232,6 +239,7 @@ def test_install_deps_pre(newmocksession):
     venv = mocksession.getvenv("python")
     with mocksession.newaction(venv.name, "getenv") as action:
         tox_testenv_create(action=action, venv=venv)
+        venv.just_created = True
     pcalls = mocksession._pcalls
     assert len(pcalls) == 1
     pcalls[:] = []
@@ -293,6 +301,7 @@ def test_install_sdist_extras(newmocksession):
     venv = mocksession.getvenv("python")
     with mocksession.newaction(venv.name, "getenv") as action:
         tox_testenv_create(action=action, venv=venv)
+        venv.just_created = True
     pcalls = mocksession._pcalls
     assert len(pcalls) == 1
     pcalls[:] = []
@@ -313,6 +322,7 @@ def test_develop_extras(newmocksession, tmpdir):
     venv = mocksession.getvenv("python")
     with mocksession.newaction(venv.name, "getenv") as action:
         tox_testenv_create(action=action, venv=venv)
+        venv.just_created = True
     pcalls = mocksession._pcalls
     assert len(pcalls) == 1
     pcalls[:] = []
@@ -518,6 +528,7 @@ def test_install_python3(newmocksession):
     venv = mocksession.getvenv("py123")
     with mocksession.newaction(venv.name, "getenv") as action:
         tox_testenv_create(action=action, venv=venv)
+        venv.just_created = True
         pcalls = mocksession._pcalls
         assert len(pcalls) == 1
         args = pcalls[0].args
@@ -970,6 +981,21 @@ def test_ignore_outcome_failing_cmd(newmocksession):
     mocksession.report.expect("warning", "*command failed but result from testenv is ignored*")
 
 
+def test_ignore_outcome_missing_cmd(newmocksession):
+    mocksession = newmocksession(
+        [],
+        """\
+        [testenv]
+        commands=-thiscommanddoesntexist
+        """,
+    )
+
+    venv = mocksession.getvenv("python")
+    venv.test()
+    assert venv.status == 0
+    mocksession.report.expect("warning", "*command not found but explicitly ignored*")
+
+
 def test_tox_testenv_create(newmocksession):
     log = []
 
@@ -1149,6 +1175,18 @@ def test_tox_testenv_interpret_shebang_long_example(tmpdir):
     assert args == expected + base_args
 
 
+@pytest.mark.skipif("sys.platform == 'win32'", reason="no shebang on Windows")
+def test_tox_testenv_interpret_shebang_skip_truncated(tmpdir):
+    testfile = tmpdir.join("check_shebang_truncation.py")
+    original_args = [str(testfile), "arg1", "arg2", "arg3"]
+
+    # interpreter (too long example)
+    testfile.write("#!" + ("x" * (MAXINTERP + 1)))
+    args = prepend_shebang_interpreter(original_args)
+
+    assert args == original_args
+
+
 @pytest.mark.parametrize("download", [True, False, None])
 def test_create_download(mocksession, newconfig, download):
     config = newconfig(
@@ -1164,6 +1202,7 @@ def test_create_download(mocksession, newconfig, download):
     venv = mocksession.getvenv("env")
     with mocksession.newaction(venv.name, "getenv") as action:
         tox_testenv_create(action=action, venv=venv)
+        venv.just_created = True
     pcalls = mocksession._pcalls
     assert len(pcalls) >= 1
     args = pcalls[0].args
@@ -1195,3 +1234,17 @@ def test_path_change(tmpdir, mocksession, newconfig, monkeypatch):
         path = x.env["PATH"]
         assert os.environ["PATH"] in path
         assert path.endswith(str(venv.envconfig.config.toxinidir) + "/bin")
+
+
+def test_runenvreport_pythonpath_discarded(newmocksession, mocker):
+    mock_os_environ = mocker.patch("tox.venv.VirtualEnv._get_os_environ")
+    mocksession = newmocksession([], "")
+    venv = mocksession.getvenv("python")
+    mock_os_environ.return_value = dict(PYTHONPATH="/some/path/")
+    mock_pcall = mocker.patch.object(venv, "_pcall")
+    tox_runenvreport(venv, None)
+    try:
+        env = mock_pcall.mock_calls[0].kwargs["env"]
+    except TypeError:  # older pytest (python 3.7 and below)
+        env = mock_pcall.mock_calls[0][2]["env"]
+    assert "PYTHONPATH" not in env

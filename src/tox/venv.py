@@ -1,7 +1,6 @@
 import codecs
 import json
 import os
-import pipes
 import re
 import sys
 from itertools import chain
@@ -18,6 +17,14 @@ from tox.util.lock import get_unique_file
 from tox.util.path import ensure_empty_dir
 
 from .config import DepConfig
+
+if sys.version_info >= (3, 3):
+    from shlex import quote as shlex_quote
+else:
+    from pipes import quote as shlex_quote
+
+#: maximum parsed shebang interpreter length (see: prepend_shebang_interpreter)
+MAXINTERP = 2048
 
 
 class CreationConfig:
@@ -154,7 +161,7 @@ class VirtualEnv(object):
 
     @property
     def path(self):
-        """ Path to environment base dir. """
+        """Path to environment base dir."""
         return self.envconfig.envdir
 
     @property
@@ -163,7 +170,7 @@ class VirtualEnv(object):
 
     @property
     def name(self):
-        """ test environment name. """
+        """test environment name."""
         return self.envconfig.envname
 
     def __repr__(self):
@@ -191,7 +198,7 @@ class VirtualEnv(object):
 
         if path is None:
             raise tox.exception.InvocationError(
-                "could not find executable {}".format(pipes.quote(name)),
+                "could not find executable {}".format(shlex_quote(name)),
             )
 
         return str(path)  # will not be rewritten for reporting
@@ -322,6 +329,10 @@ class VirtualEnv(object):
 
     def _needs_reinstall(self, setupdir, action):
         setup_py = setupdir.join("setup.py")
+
+        if not setup_py.exists():
+            return False
+
         setup_cfg = setupdir.join("setup.cfg")
         args = [self.envconfig.envpython, str(setup_py), "--name"]
         env = self._get_os_environ()
@@ -527,7 +538,7 @@ class VirtualEnv(object):
                 # happens if the same environment is invoked twice
                 message = "commands[{}] | {}".format(
                     i,
-                    " ".join([pipes.quote(str(x)) for x in argv]),
+                    " ".join(shlex_quote(str(x)) for x in argv),
                 )
                 action.setactivity(name, message)
                 # check to see if we need to ignore the return code
@@ -576,6 +587,7 @@ class VirtualEnv(object):
         ignore_ret=False,
         returnout=False,
         env=None,
+        capture_err=True,
     ):
         if env is None:
             env = self._get_os_environ(is_test_command=is_test_command)
@@ -588,7 +600,17 @@ class VirtualEnv(object):
         reporter.verbosity2("setting PATH={}".format(env["PATH"]))
 
         # get command
-        args[0] = self.getcommandpath(args[0], venv, cwd)
+        try:
+            args[0] = self.getcommandpath(args[0], venv, cwd)
+        except tox.exception.InvocationError:
+            if ignore_ret:
+                self.status = getattr(self, "status", 0)
+                msg = "command not found but explicitly ignored"
+                reporter.warning("{}\ncmd: {}".format(msg, args[0]))
+                return ""  # in case it's returnout
+            else:
+                raise
+
         if sys.platform != "win32" and "TOX_LIMITED_SHEBANG" in os.environ:
             args = prepend_shebang_interpreter(args)
 
@@ -601,6 +623,7 @@ class VirtualEnv(object):
             ignore_ret=ignore_ret,
             returnout=returnout,
             report_fail=not is_test_command,
+            capture_err=capture_err,
         )
 
     def setupenv(self):
@@ -609,10 +632,8 @@ class VirtualEnv(object):
                 "unresolvable substitution(s):\n    {}\n"
                 "Environment variables are missing or defined recursively.".format(
                     "\n    ".join(
-                        [
-                            "{}: '{}'".format(section_key, exc.name)
-                            for section_key, exc in sorted(self.envconfig._missing_subs.items())
-                        ],
+                        "{}: '{}'".format(section_key, exc.name)
+                        for section_key, exc in sorted(self.envconfig._missing_subs.items())
                     ),
                 )
             )
@@ -674,7 +695,7 @@ def prepend_shebang_interpreter(args):
     #
     # When preparing virtual environments in a file container which has large
     # length, the system might not be able to invoke shebang scripts which
-    # define interpreters beyond system limits (e.x. Linux as a limit of 128;
+    # define interpreters beyond system limits (e.g. Linux has a limit of 128;
     # BINPRM_BUF_SIZE). This method can be used to check if the executable is
     # a script containing a shebang line. If so, extract the interpreter (and
     # possible optional argument) and prepend the values to the provided
@@ -684,8 +705,9 @@ def prepend_shebang_interpreter(args):
     try:
         with open(args[0], "rb") as f:
             if f.read(1) == b"#" and f.read(1) == b"!":
-                MAXINTERP = 2048
-                interp = f.readline(MAXINTERP).rstrip().decode("UTF-8")
+                interp = f.readline(MAXINTERP + 1).rstrip().decode("UTF-8")
+                if len(interp) > MAXINTERP:  # avoid a truncated interpreter
+                    return args
                 interp_args = interp.split(None, 1)[:2]
                 return interp_args + args
     except (UnicodeDecodeError, IOError):
@@ -818,7 +840,11 @@ def tox_runtest_post(venv):
 def tox_runenvreport(venv, action):
     # write out version dependency information
     args = venv.envconfig.list_dependencies_command
-    output = venv._pcall(args, cwd=venv.envconfig.config.toxinidir, action=action, returnout=True)
+    env = venv._get_os_environ()
+    venv.ensure_pip_os_environ_ok(env)
+    output = venv._pcall(
+        args, cwd=venv.envconfig.config.toxinidir, action=action, returnout=True, env=env
+    )
     # the output contains a mime-header, skip it
     output = output.split("\n\n")[-1]
     packages = output.strip().split("\n")

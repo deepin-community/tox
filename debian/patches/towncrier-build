@@ -1,0 +1,27 @@
+From: Faidon Liambotis <paravoid@debian.org>
+Date: Wed, 11 Jan 2023 05:36:27 +0200
+Subject: Pass "build" as the first argument to towncrier
+
+Call
+  towncrier build --draft --version DRAFT
+instead of calling
+  towncrier --draft --version DRAFT
+
+towncrier as currently executed, just prints its version.
+---
+ docs/conf.py | 2 +-
+ 1 file changed, 1 insertion(+), 1 deletion(-)
+
+diff --git a/docs/conf.py b/docs/conf.py
+index 2a9e9e1..03c9939 100644
+--- a/docs/conf.py
++++ b/docs/conf.py
+@@ -36,7 +36,7 @@ def generate_draft_news():
+         [os.path.dirname(sys.executable)] + env["PATH"].split(os.pathsep),
+     )
+     changelog = subprocess.check_output(
+-        ["towncrier", "--draft", "--version", "DRAFT"],
++        ["towncrier", "build", "--draft", "--version", "DRAFT"],
+         cwd=str(ROOT_SRC_TREE_DIR),
+         env=env,
+     ).decode("utf-8")
