@@ -1,3 +1,44 @@
+tox (3.28.0-2) unstable; urgency=medium
+
+  * Add a dependency on python3-tomli to fix runtime failures when running
+    under Python versions earlier than 3.11. This was in setup.cfg as a
+    complex environment marker that pydist could not parse.
+
+ -- Faidon Liambotis <paravoid@debian.org>  Wed, 11 Jan 2023 18:54:22 +0200
+
+tox (3.28.0-1) unstable; urgency=medium
+
+  * New upstream release, from the legacy 3.x branch.
+  * Update debian/watch to point to tarballs from GitHub, as these are more
+    complete nowadays.
+  * Use SETUPTOOLS_SCM_PRETEND_VERSION to fix the setuptools_scm version, and
+    to avoid the version being set based on the git tag.
+  * Drop patch disable-setuptools-scm: instead of patching setup.py to disable
+    setuptools_scm, use it, but set SETUPTOOLS_SCM_PRETEND_VERSION to instruct
+    it to not fetch the version from git, but rather set it statically to
+    DEB_VERSION_UPSTREAM.
+  * Add support for the nodoc build option and profile.
+  * towncrier now exists in Debian, so use it instead of faking it with our
+    own "faketowncrier" version. It still does not serve any purpose in the
+    package, but helps with avoiding any drift with upstream. Add patch
+    "towncrier-build" to fix an issue with how tox invokes it right now.
+  * Various package hygiene cleanups:
+    - Add a gbp.conf file to always enable pristine-tar and to switch to the
+      new style (*/latest) DEP-14 branch structure.
+    - Add debian/source/options to extend-diff-ignore the "egg-info"
+      directory which tends to be uselessly dirty.
+    - Use the more declarative debian/clean file instead of an dh_auto_clean
+      override.
+    - Use execute_after_dh_auto_build instead of override_, given we were not
+      really overriding.
+    - Use dh-sequence-python3 and dh-sequence-sphinxdoc, instead of passing
+      --with to dh.
+    - Update Homepage with the new tox.wiki website.
+    - Add debian/upstream/metadata.
+    - Bump Standards-Version to 4.6.2, no changes needed.
+
+ -- Faidon Liambotis <paravoid@debian.org>  Wed, 11 Jan 2023 06:22:30 +0200
+
 tox (3.21.4-1) unstable; urgency=medium
 
   * New upstream release.

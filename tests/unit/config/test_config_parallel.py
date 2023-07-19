@@ -1,5 +1,7 @@
 import pytest
 
+from tox.config.parallel import ENV_VAR_KEY_PRIVATE as PARALLEL_ENV_VAR_KEY_PRIVATE
+
 
 def test_parallel_default(newconfig):
     config = newconfig([], "")
@@ -38,7 +40,7 @@ def test_parallel_number_negative(newconfig, capsys):
     assert "value must be positive" in err
 
 
-def test_depends(newconfig, capsys):
+def test_depends(newconfig):
     config = newconfig(
         """\
         [tox]
@@ -49,7 +51,7 @@ def test_depends(newconfig, capsys):
     assert config.envconfigs["py"].depends == ("py37", "py36")
 
 
-def test_depends_multi_row_facotr(newconfig, capsys):
+def test_depends_multi_row_facotr(newconfig):
     config = newconfig(
         """\
         [tox]
@@ -61,7 +63,7 @@ def test_depends_multi_row_facotr(newconfig, capsys):
     assert config.envconfigs["py"].depends == ("py37", "py36-a", "py36-b")
 
 
-def test_depends_factor(newconfig, capsys):
+def test_depends_factor(newconfig):
     config = newconfig(
         """\
         [tox]
@@ -70,3 +72,17 @@ def test_depends_factor(newconfig, capsys):
         """,
     )
     assert config.envconfigs["py"].depends == ("py37-cov", "py37-no", "py36-cov", "py36-no")
+
+
+def test_parallel_env_selection_with_ALL(newconfig, monkeypatch):
+    # Regression test for #2167
+    inisource = """
+        [tox]
+        envlist = py,lint
+    """
+    monkeypatch.setenv(PARALLEL_ENV_VAR_KEY_PRIVATE, "py")
+    config = newconfig(["-eALL"], inisource)
+    assert config.envlist == ["py"]
+    monkeypatch.setenv(PARALLEL_ENV_VAR_KEY_PRIVATE, "lint")
+    config = newconfig(["-eALL"], inisource)
+    assert config.envlist == ["lint"]

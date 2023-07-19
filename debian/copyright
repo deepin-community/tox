@@ -1,10 +1,10 @@
 Format: https://www.debian.org/doc/packaging-manuals/copyright-format/1.0/
 Upstream-Name: tox
-Source: https://pypi.python.org/pypi/tox
+Source: https://github.com/tox-dev/tox
 
 Files: *
 Copyright: Holger Krekel, Oliver Bestwalter, Bernát Gábor and others
-License: MIT
+License: Expat
 
 Files: src/tox/_quickstart.py
 Copyright: 2007-2011 by the Sphinx team
@@ -13,10 +13,10 @@ License: BSD-2-clause
 Files: debian/*
 Copyright: 2012 Bradley Froehle <brad.froehle@gmail.com>
            2012 Barry Warsaw <barry@debian.org>
-           2018-2021 Faidon Liambotis <paravoid@debian.org>
-License: MIT
+           2018-2023 Faidon Liambotis <paravoid@debian.org>
+License: Expat
 
-License: MIT
+License: Expat
   Permission is hereby granted, free of charge, to any person obtaining a
   copy of this software and associated documentation files (the
   "Software"), to deal in the Software without restriction, including

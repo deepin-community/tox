@@ -11,6 +11,284 @@ with advance notice in the **Deprecations** section of releases.
 
 .. towncrier release notes start
 
+v3.28.0 (2022-12-14)
+--------------------
+
+Features
+^^^^^^^^
+
+- Support provision of tox 4 with the ``min_version`` option - by :user:`hroncok`
+  `#2661 <https://github.com/tox-dev/tox/issues/2661>`_
+
+
+v3.27.1 (2022-11-13)
+--------------------
+
+Bugfixes
+^^^^^^^^
+
+- Replaced deprecated ``license_file`` key with ``license_files`` in ``setup.cfg`` -- by :user:`mgorny`.
+  `#2521 <https://github.com/tox-dev/tox/issues/2521>`_
+- Add env cleanup to envreport - fix PYTHONPATH leak into "envreport" -- by :user:`f3flight`.
+  `#2528 <https://github.com/tox-dev/tox/issues/2528>`_
+
+
+v3.27.0 (2022-10-25)
+--------------------
+
+Bugfixes
+^^^^^^^^
+
+- Dropped ``--build-option`` in isolated builds, an alternative fix for the ``SetuptoolsDeprecationWarning`` about using ``--global-option`` -- by :user:`adamchainz`
+  `#2497 <https://github.com/tox-dev/tox/issues/2497>`_
+- Remove read-only files in ``ensure_empty_dir``.
+  `#2498 <https://github.com/tox-dev/tox/issues/2498>`_
+- Multiple tox instances no longer clobber the ``.tox`` directory when
+  ``provision_tox_env`` is used. - by :user:`masenf`
+  `#2515 <https://github.com/tox-dev/tox/issues/2515>`_
+
+
+Documentation
+^^^^^^^^^^^^^
+
+- Clarify that ``install_command`` only takes one command - by :user:`jugmac00`
+  `#2433 <https://github.com/tox-dev/tox/issues/2433>`_
+- Documented problems with plugin and provision env - by :user:`ziima`.
+  `#2469 <https://github.com/tox-dev/tox/issues/2469>`_
+
+
+v3.26.0 (2022-09-07)
+--------------------
+
+Bugfixes
+^^^^^^^^
+
+- Fix fallback to ``python`` environment when ``isolated_build = true`` is set -- by :user:`Unrud`
+  `#2474 <https://github.com/tox-dev/tox/issues/2474>`_
+- Fixed ``SetuptoolsDeprecationWarning`` about using ``--global-option`` -- by :user:`adamchainz`
+  `#2478 <https://github.com/tox-dev/tox/issues/2478>`_
+
+
+Features
+^^^^^^^^
+
+- Use ``tomllib`` on Python 3.11 or later and ``tomli`` instead of ``toml`` library on lower versions - by :user:`hroncok`.
+  `#2463 <https://github.com/tox-dev/tox/issues/2463>`_
+
+
+v3.25.1 (2022-06-29)
+--------------------
+
+Bugfixes
+^^^^^^^^
+
+- ``sitepackages = true`` will add user's site-package to the python path on Windows as expected -- by :user:`niander`
+  `#2402 <https://github.com/tox-dev/tox/issues/2402>`_
+- Avoid importing ``pipes`` on Python 3.3+ to avoid ``DeprecationWarning`` on Python 3.11 -- by :user:`adamchainz`
+  `#2417 <https://github.com/tox-dev/tox/issues/2417>`_
+- Fix ``isolated_build`` when the build process produces stderr at exit.
+  `#2449 <https://github.com/tox-dev/tox/issues/2449>`_
+
+
+Documentation
+^^^^^^^^^^^^^
+
+- Explain advantages of ``PIP_CONSTRAINT`` environment variable over ``--constraint`` argument.
+  `#2423 <https://github.com/tox-dev/tox/issues/2423>`_
+
+
+v3.25.0 (2022-04-11)
+--------------------
+
+Bugfixes
+^^^^^^^^
+
+- Fixed failing isolated_build because setuptools warning was captured
+  in ``build_requires``. -- by :user:`zariiii9003`
+  `#2332 <https://github.com/tox-dev/tox/issues/2332>`_
+- Avoid potential 30s delay caused by socket.getfqdn(). -- by :user:`ssbarnea`
+  `#2375 <https://github.com/tox-dev/tox/issues/2375>`_
+
+
+Features
+^^^^^^^^
+
+- Ignore missing commands if they are prefixed by ``-``
+  -- by :user:`cdown`.
+  `#2315 <https://github.com/tox-dev/tox/issues/2315>`_
+- Add default environment variables (such as http_proxy) regardless of their case to passenv on UNIX -- by :user:`poggenhans`.
+  `#2372 <https://github.com/tox-dev/tox/issues/2372>`_
+- On Windows ``PROGRAMFILES``, ``PROGRAMFILES(X86)``, and ``PROGRAMDATA`` environment variables are now passed through, unmasking system values necessary to locate resources such as a C compiler.
+  `#2382 <https://github.com/tox-dev/tox/issues/2382>`_
+
+
+Documentation
+^^^^^^^^^^^^^
+
+- Deleted the tox mailing list -- by :user:`jugmac00`
+  `#2364 <https://github.com/tox-dev/tox/issues/2364>`_
+
+
+v3.24.5 (2021-12-29)
+--------------------
+
+Bugfixes
+^^^^^^^^
+
+- Fixed an issue where ``usedevelop`` would cause an invocation error if setup.py does not exist. -- by :user:`VincentVanlaer`
+  `#2197 <https://github.com/tox-dev/tox/issues/2197>`_
+
+
+v3.24.4 (2021-09-16)
+--------------------
+
+Bugfixes
+^^^^^^^^
+
+- Fixed handling of ``-e ALL`` in parallel mode by ignoring the ``ALL`` in subprocesses -- by :user:`guahki`.
+  `#2167 <https://github.com/tox-dev/tox/issues/2167>`_
+- Prevent tox from using a truncated interpreter when using
+  ``TOX_LIMITED_SHEBANG`` -- by :user:`jdknight`.
+  `#2208 <https://github.com/tox-dev/tox/issues/2208>`_
+
+
+Documentation
+^^^^^^^^^^^^^
+
+- Enabled the use of the favicon in the Sphinx docs first
+  introduced in :pull:`764` but not integrated fully
+  -- :user:`webknjaz`
+  `#2177 <https://github.com/tox-dev/tox/issues/2177>`_
+
+
+v3.24.3 (2021-08-21)
+--------------------
+
+Bugfixes
+^^^^^^^^
+
+- ``--parallel`` reports now show ASCII OK/FAIL/SKIP lines when full Unicode output is not available - by :user:`brettcs`
+  `#1421 <https://github.com/tox-dev/tox/issues/1421>`_
+
+
+Miscellaneous
+^^^^^^^^^^^^^
+
+- Started enforcing valid references in Sphinx docs -- :user:`webknjaz`
+  `#2168 <https://github.com/tox-dev/tox/issues/2168>`_
+
+
+v3.24.2 (2021-08-18)
+--------------------
+
+Bugfixes
+^^^^^^^^
+
+- include ``LC_ALL`` to implicit list of passenv variables - by :user:`ssbarnea`
+  `#2162 <https://github.com/tox-dev/tox/issues/2162>`_
+
+
+v3.24.1 (2021-07-31)
+--------------------
+
+Bugfixes
+^^^^^^^^
+
+- ``get_requires_for_build_sdist`` hook (PEP 517) is assumed to return an empty list if left unimplemented by the backend build system - by :user:`oczkoisse`
+  `#2130 <https://github.com/tox-dev/tox/issues/2130>`_
+
+
+Documentation
+^^^^^^^^^^^^^
+
+- The documentation of ``install_command`` now also mentions that you can provide arbitrary commands - by :user:`jugmac00`
+  `#2081 <https://github.com/tox-dev/tox/issues/2081>`_
+
+
+v3.24.0 (2021-07-14)
+--------------------
+
+Bugfixes
+^^^^^^^^
+
+- ``--devenv`` no longer modifies the directory in which the ``.tox`` environment is provisioned - by :user:`isaac-ped`
+  `#2065 <https://github.com/tox-dev/tox/issues/2065>`_
+- Fix show config when the package names are not in canonical form - by :user:`gaborbernat`.
+  `#2103 <https://github.com/tox-dev/tox/issues/2103>`_
+
+
+Documentation
+^^^^^^^^^^^^^
+
+- Extended environment variables section - by :user:`majiang`
+  `#2036 <https://github.com/tox-dev/tox/issues/2036>`_
+
+
+Miscellaneous
+^^^^^^^^^^^^^
+
+- ``tox`` no longer shows deprecation warnings for ``distutils.sysconfig`` on
+  Python 3.10 - by :user:`9999years`
+  `#2100 <https://github.com/tox-dev/tox/issues/2100>`_
+
+
+v3.23.1 (2021-05-05)
+--------------------
+
+Bugfixes
+^^^^^^^^
+
+- Distinguish between normal Windows Python and MSYS2 Python when looking for
+  virtualenv executable path.  Adds os.sep to :class:`~tox.interpreters.InterpreterInfo`
+  - by :user:`jschwartzentruber`
+  `#1982 <https://github.com/tox-dev/tox/issues/1982>`_
+- Fix a ``tox-conda`` isolation build bug - by :user:`AntoineD`.
+  `#2056 <https://github.com/tox-dev/tox/issues/2056>`_
+
+
+Documentation
+^^^^^^^^^^^^^
+
+- Update examples in the documentation to use ``setenv`` in the ``[testenv]`` sections, not wrongly in the ``[tox]`` main section.
+  - by :user:`AndreyNautilus`
+  `#1999 <https://github.com/tox-dev/tox/issues/1999>`_
+
+
+Miscellaneous
+^^^^^^^^^^^^^
+
+- Enable building tox with ``setuptools_scm`` 6+ by :user:`hroncok`
+  `#1984 <https://github.com/tox-dev/tox/issues/1984>`_
+
+
+v3.23.0 (2021-03-03)
+--------------------
+
+Features
+^^^^^^^^
+
+- tox can now be invoked with a new ``--no-provision`` flag that prevents provision,
+  if :conf:`requires` or :conf:`minversion` are not satisfied,
+  tox will fail;
+  if a path is specified as an argument to the flag
+  (e.g. as ``tox --no-provision missing.json``) and provision is prevented,
+  provision metadata are written as JSON to that path - by :user:`hroncok`
+  `#1921 <https://github.com/tox-dev/tox/issues/1921>`_
+- Unicode support in ``pyproject.toml`` - by :user:`domdfcoding`
+  `#1940 <https://github.com/tox-dev/tox/issues/1940>`_
+
+
+v3.22.0 (2021-02-16)
+--------------------
+
+Features
+^^^^^^^^
+
+- The value of the :conf:`requires` configuration option is now exposed via
+  the :class:`tox.config.Config` object - by :user:`hroncok`
+  `#1918 <https://github.com/tox-dev/tox/issues/1918>`_
+
+
 v3.21.4 (2021-02-02)
 --------------------
 
@@ -962,7 +1240,7 @@ Features
 - While running tox invokes various commands (such as building the package, pip installing dependencies and so on), these were printed in case they failed as Python arrays. Changed the representation to a shell command, allowing the users to quickly replicate/debug the failure on their own - by :user:`gaborbernat` (`#851 <https://github.com/tox-dev/tox/issues/851>`_)
 - skip missing interpreters value from the config file can now be overridden via the ``--skip-missing-interpreters`` cli flag - by :user:`gaborbernat` (`#903 <https://github.com/tox-dev/tox/issues/903>`_)
 - keep additional environments config order when listing them - by :user:`gaborbernat` (`#921 <https://github.com/tox-dev/tox/issues/921>`_)
-- allow injecting config value inside the ini file dependent of the fact that we're connected to an interactive shell or not  - by :user:`gaborbernat` (`#947 <https://github.com/tox-dev/tox/issues/947>`_)
+- allow injecting config value inside the ini file dependent of the fact that we're connected to an interactive shell or not via exposing a ``{tty}`` substitution - by :user:`gaborbernat` (`#947 <https://github.com/tox-dev/tox/issues/947>`_)
 - do not build sdist if skip install is specified for the envs to be run - by :user:`gaborbernat` (`#974 <https://github.com/tox-dev/tox/issues/974>`_)
 - when verbosity level increases above two start passing through verbosity flags to pip - by :user:`gaborbernat` (`#982 <https://github.com/tox-dev/tox/issues/982>`_)
 - when discovering the interpreter to use check if the tox host Python matches and use that if so - by :user:`gaborbernat` (`#994 <https://github.com/tox-dev/tox/issues/994>`_)
@@ -1326,7 +1604,7 @@ v2.8.0 (2017-09-01)
 - `pull request 585 <https://github.com/tox-dev/tox/pull/585>`_: Expand documentation to explain pass through of flags from deps to pip
   (e.g. ``-rrequirements.txt``, ``-cconstraints.txt``). Thanks Alexander Loechel (`@loechel <https://github.com/loechel>`_).
 
-- `pull request 588 <https://github.com/tox-dev/tox/pull/588>`_: Run pytest wit xfail_strict and adapt affected tests.
+- `pull request 588 <https://github.com/tox-dev/tox/pull/588>`_: Run pytest with xfail_strict and adapt affected tests.
 
 v2.7.0 (2017-04-02)
 -------------------

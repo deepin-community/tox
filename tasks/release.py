@@ -1,4 +1,3 @@
-# -*- coding: utf-8 -*-
 """Handles creating a release PR"""
 from pathlib import Path
 from subprocess import check_call
@@ -27,11 +26,11 @@ def main(version_str: str) -> None:
 
 
 def create_release_branch(repo: Repo, version: Version) -> Tuple[Remote, Head]:
-    print("create release branch from upstream master")
+    print("create release branch from upstream legacy")
     upstream = get_upstream(repo)
     upstream.fetch()
     branch_name = f"release-{version}"
-    release_branch = repo.create_head(branch_name, upstream.refs.master, force=True)
+    release_branch = repo.create_head(branch_name, upstream.refs.legacy, force=True)
     upstream.push(refspec=f"{branch_name}:{branch_name}", force=True)
     release_branch.set_tracking_branch(repo.refs[f"{upstream.name}/{branch_name}"])
     release_branch.checkout()
@@ -48,7 +47,7 @@ def get_upstream(repo: Repo) -> Remote:
 
 def release_changelog(repo: Repo, version: Version) -> Commit:
     print("generate release commit")
-    check_call(["towncrier", "--yes", "--version", version.public], cwd=str(ROOT_SRC_DIR))
+    check_call(["towncrier", "build", "--yes", "--version", version.public], cwd=str(ROOT_SRC_DIR))
     release_commit = repo.index.commit(f"release {version}")
     return release_commit
 
@@ -57,9 +56,9 @@ def tag_release_commit(release_commit, repo, version) -> TagReference:
     print("tag release commit")
     existing_tags = [x.name for x in repo.tags]
     if version in existing_tags:
-        print("delete existing tag {}".format(version))
+        print(f"delete existing tag {version}")
         repo.delete_tag(version)
-    print("create tag {}".format(version))
+    print(f"create tag {version}")
     tag = repo.create_tag(version, ref=release_commit, force=True)
     return tag
 

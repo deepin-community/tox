@@ -121,33 +121,35 @@ Depending on requirements.txt or defining constraints
 
 .. versionadded:: 1.6.1
 
-(experimental) If you have a ``requirements.txt`` file or a ``constraints.txt`` file you can add it to your ``deps`` variable like this:
+(experimental) If you have a ``requirements.txt`` file you can add it to your ``deps`` variable like this:
 
 .. code-block:: ini
 
     [testenv]
     deps = -rrequirements.txt
 
-or
+This is actually a side effect that all elements of the dependency list is directly passed to ``pip``.
+
+If you have a ``constraints.txt`` file you could add it to your ``deps`` like the ``requirements.txt`` file above.
+However, then it would not be applied to
+
+* build time dependencies when using isolated builds (https://github.com/pypa/pip/issues/8439)
+* run time dependencies not already listed in ``deps``.
+
+A better method may be to use ``setenv`` like this:
 
 .. code-block:: ini
 
     [testenv]
-    deps = -cconstraints.txt
+    setenv = PIP_CONSTRAINT=constraints.txt
 
-or
+Make sure that all dependencies, including transient dependencies, are listed in your ``constraints.txt`` file or the version used may vary.
 
-.. code-block:: ini
-
-    [testenv]
-    deps =
-        -rrequirements.txt
-        -cconstraints.txt
+It should be noted that ``pip``, ``setuptools`` and ``wheel`` are often not part of the dependency tree and will be left at whatever version ``virtualenv`` used to seed the environment.
 
 All installation commands are executed using ``{toxinidir}`` (the directory where ``tox.ini`` resides) as the current working directory.
 Therefore, the underlying ``pip`` installation will assume ``requirements.txt`` or ``constraints.txt`` to exist at ``{toxinidir}/requirements.txt`` or ``{toxinidir}/constraints.txt``.
 
-This is actually a side effect that all elements of the dependency list is directly passed to ``pip``.
 
 For more details on ``requirements.txt`` files or ``constraints.txt`` files please see:
 
@@ -172,15 +174,15 @@ This variable can be also set in ``tox.ini``:
 
 .. code-block:: ini
 
-    [tox]
+    [testenv]
     setenv =
         PIP_INDEX_URL = https://pypi.my-alternative-index.org
 
-Alternatively, a configuration where ``PIP_INDEX_URL`` could be overriden from environment:
+Alternatively, a configuration where ``PIP_INDEX_URL`` could be overridden from environment:
 
 .. code-block:: ini
 
-    [tox]
+    [testenv]
     setenv =
         PIP_INDEX_URL = {env:PIP_INDEX_URL:https://pypi.my-alternative-index.org}
 
@@ -192,11 +194,9 @@ multiple PyPI servers, using ``PIP_EXTRA_INDEX_URL`` environment variable:
 
 .. code-block:: ini
 
-    [tox]
+    [testenv]
     setenv =
         PIP_EXTRA_INDEX_URL = https://mypypiserver.org
-
-    [testenv]
     deps =
         # docutils will be installed directly from PyPI
         docutils
@@ -204,8 +204,14 @@ multiple PyPI servers, using ``PIP_EXTRA_INDEX_URL`` environment variable:
         mypackage
 
 This configuration will install ``docutils`` from the default
-Python PYPI server and will install the ``mypackage`` from
+Python PyPI server and will install the ``mypackage`` from
 our index server at ``https://mypypiserver.org`` URL.
+
+.. warning::
+
+  Using an extra PyPI index for installing private packages may cause security issues.
+  For example, if ``mypackage`` is registered with the default PyPI index, pip will install ``mypackage``
+  from the default PyPI index, not from the custom one.
 
 Further customizing installation
 ---------------------------------
@@ -215,7 +221,7 @@ Further customizing installation
 By default tox uses `pip`_ to install packages, both the
 package-under-test and any dependencies you specify in ``tox.ini``.
 You can fully customize tox's install-command through the
-testenv-specific :conf:`install_command=ARGV` setting.
+testenv-specific :conf:`install_command = ARGV <install_command>` setting.
 For instance, to use pip's ``--find-links`` and ``--no-index`` options to specify
 an alternative source for your dependencies:
 
