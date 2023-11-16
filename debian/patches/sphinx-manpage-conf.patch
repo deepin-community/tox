@@ -1,0 +1,78 @@
+From: Faidon Liambotis <paravoid@debian.org>
+Date: Fri, 24 Feb 2023 20:18:58 +0200
+Subject: Generate the manpage from docs/
+
+Generate a basic manpage, leveraging sphinx_argparse_cli.
+
+Bug: https://github.com/tox-dev/tox/issues/1409
+---
+ docs/conf.py |  5 +++++
+ docs/man.rst | 43 +++++++++++++++++++++++++++++++++++++++++++
+ 2 files changed, 48 insertions(+)
+ create mode 100644 docs/man.rst
+
+diff --git a/docs/conf.py b/docs/conf.py
+index f155d3b..7429bfa 100644
+--- a/docs/conf.py
++++ b/docs/conf.py
+@@ -26,6 +26,11 @@ release, version = __version__, ".".join(__version__.split(".")[:2])
+ copyright = f"{company}"  # noqa: A001
+ master_doc, source_suffix = "index", ".rst"
+ 
++sphinx_argparse_cli_prefix_document = True
++man_pages = [
++    ("man", "tox", "automation project", "", 1)
++]
++
+ html_theme = "furo"
+ html_title, html_last_updated_fmt = "tox", "%Y-%m-%dT%H:%M:%S"
+ pygments_style, pygments_dark_style = "sphinx", "monokai"
+diff --git a/docs/man.rst b/docs/man.rst
+new file mode 100644
+index 0000000..bda5754
+--- /dev/null
++++ b/docs/man.rst
+@@ -0,0 +1,43 @@
++tox
++===
++
++Synopsis
++--------
++
++**tox** [*subcommand*] [*options*] [*args* ...]
++
++Description
++-----------
++
++tox is a generic virtual environment management and test command line tool you can use for:
++
++* checking your package builds and installs correctly under different environments (such as different Python
++  implementations, versions or installation dependencies),
++* running your tests in each of the environments with the test tool of choice,
++* acting as a frontend to continuous integration servers, greatly reducing boilerplate and merging CI and
++  shell-based testing.
++
++Overview
++--------
++
++tox has several subcommands, each with their own options. Below you can find an
++exhaustive list of options for each of those subcommands.
++
++Each tox subcommand has a 1 (or 2) letter shortcut form too. For example, `tox
++run` can also be written as `tox r` or `tox config` can be shortened to `tox
++c`.
++
++Options
++-------
++
++.. sphinx_argparse_cli::
++  :module: tox.config.cli.parse
++  :func: _get_parser_doc
++  :title: tox entry point
++  :description:
++
++Environment variables
++---------------------
++TOXENV
++
++   comma separated list of environments (overridable by '-e')

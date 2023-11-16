@@ -1,0 +1,52 @@
+From: Faidon Liambotis <paravoid@debian.org>
+Date: Fri, 24 Feb 2023 19:48:19 +0200
+Subject: Remove references to shields.io
+
+This leaks metadata to the web, and rightfully triggers lintian's
+privacy-breach errors.
+
+Forwarded: not-needed
+---
+ docs/index.rst | 29 -----------------------------
+ 1 file changed, 29 deletions(-)
+
+diff --git a/docs/index.rst b/docs/index.rst
+index 02f146f..96a1ac9 100644
+--- a/docs/index.rst
++++ b/docs/index.rst
+@@ -5,35 +5,6 @@ tox - automation project
+ testing and release process of Python software (alongside `pytest <https://docs.pytest.org/en/latest/>`_
+ and `devpi <https://www.devpi.net>`_).
+ 
+-.. image:: https://img.shields.io/pypi/v/tox?style=flat-square
+-  :target: https://pypi.org/project/tox/#history
+-  :alt: Latest version on PyPI
+-.. image:: https://img.shields.io/pypi/implementation/tox?style=flat-square
+-  :alt: PyPI - Implementation
+-.. image:: https://img.shields.io/pypi/pyversions/tox?style=flat-square
+-  :alt: PyPI - Python Version
+-.. image:: https://readthedocs.org/projects/tox/badge/?version=latest&style=flat-square
+-  :target: https://tox.wiki/en/latest/
+-  :alt: Documentation status
+-.. image:: https://img.shields.io/discord/802911963368783933?style=flat-square
+-  :target: https://discord.com/invite/tox
+-  :alt: Discord
+-.. image:: https://img.shields.io/pypi/dm/tox?style=flat-square
+-  :target: https://pypistats.org/packages/tox
+-  :alt: PyPI - Downloads
+-.. image:: https://img.shields.io/pypi/l/tox?style=flat-square
+-  :target: https://opensource.org/license/mit/
+-  :alt: PyPI - License
+-.. image:: https://img.shields.io/github/issues/tox-dev/tox?style=flat-square
+-  :target: https://github.com/tox-dev/tox/issues
+-  :alt: Open issues
+-.. image:: https://img.shields.io/github/issues-pr/tox-dev/tox?style=flat-square
+-  :target: https://github.com/tox-dev/tox/pulls
+-  :alt: Open pull requests
+-.. image:: https://img.shields.io/github/stars/tox-dev/tox?style=flat-square
+-  :target: https://pypistats.org/packages/tox
+-  :alt: Package popularity
+-
+ tox is a generic virtual environment management and test command line tool you can use for:
+ 
+ * checking your package builds and installs correctly under different environments (such as different Python

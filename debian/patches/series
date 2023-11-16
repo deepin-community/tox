@@ -1,2 +1,3 @@
-alabaster-no-external-links
-towncrier-build
+docs-remove-shields-io-badges.patch
+sphinx-manpage-conf.patch
+intersphinx-mapping-local.patch

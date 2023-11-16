@@ -1,3 +1,79 @@
+tox (4.11.3-1) unstable; urgency=medium
+
+  * New upstream release.
+    - Drop patch set-the-parallel-default-to-auto, merged upstream.
+
+ -- Faidon Liambotis <paravoid@debian.org>  Wed, 25 Oct 2023 12:32:58 +0300
+
+tox (4.11.0-1) unstable; urgency=medium
+
+  * New upstream release.
+    - Drop patch override_append_empty, merged upstream.
+  * Set proper DEP3 authorship information (author, date, description,
+    comment) to all three remaining Debian patches.
+  * Add an upstream patch to make the --parallel help text output not
+    dependent on the build machine's CPU count, thus fixing a FTBR.
+
+ -- Faidon Liambotis <paravoid@debian.org>  Thu, 31 Aug 2023 15:52:41 +0300
+
+tox (4.9.0-2) unstable; urgency=medium
+
+  * Team upload.
+  * Patch: Allow appending to *empty* lists with --override (mistake in the
+    last patch).
+
+ -- Stefano Rivera <stefanor@debian.org>  Sun, 20 Aug 2023 21:03:06 +0200
+
+tox (4.9.0-1) unstable; urgency=medium
+
+  * New upstream release.
+    - Drop patch override_append, merged upstream.
+  * Pass TOX_HASH_SEED when building the docs, to make the build reproducible.
+    See upstream issue #2942 for more context. (Closes: #1043330)
+
+ -- Faidon Liambotis <paravoid@debian.org>  Wed, 16 Aug 2023 22:03:46 +0300
+
+tox (4.7.0-1) unstable; urgency=medium
+
+  * New upstream release.
+  * Refresh patches.
+  * Drop relax-dependencies.patch, no longer needed.
+  * Patch: Allow appending to lists with --override.
+
+ -- Stefano Rivera <stefanor@debian.org>  Sun, 13 Aug 2023 00:57:18 +0200
+
+tox (4.4.6-2) unstable; urgency=medium
+
+  * Team upload.
+  * Supports Sphinx 7.1 (Closes: #1042636)
+
+ -- Stefano Rivera <stefanor@debian.org>  Wed, 02 Aug 2023 10:39:25 +0200
+
+tox (4.4.6-1) experimental; urgency=medium
+
+  * New major upstream release.
+    - Adjust to the new buildsystem, hatchling in the place of setuptools.
+    - Remove removed file src/tox/_quickstart.py from debian/copyright.
+    - Remove patch alabaster-no-external-links, alabaster is not used anymore.
+    - Add patch docs-remove-shields-io-badges to remove badges that reference
+      third-party web resources.
+    - Drop patch towncrier-build, included in new upstream.
+    - Drop _draft.rst.txt removal, not necessary with new upstream and with
+      the real towncrier.
+    - Add patch relax-dependencies, to relax the dependency on platformdirs to
+      the version currently in Debian (2.6.2 -> 2.6.0).
+  * Remove our handwritten manpage, and generate the manpage from the
+    project's documentation instead. Add patch sphinx-manpage-conf to generate
+    the template for it.
+  * Add extend-diff-ignore to debian/source/options to exclude the Python egg
+    (egg-info) and thus build twice from source with no warnings.
+  * Drop python3-tomli and python3-toml build and runtime dependencies, in
+    favor of requiring Python 3.11, which is the default version in Debian.
+  * Add patch intersphinx-mapping-local to resolve Python intersphinx
+    dependencies using the local objects.inv copy.
+
+ -- Faidon Liambotis <paravoid@debian.org>  Mon, 27 Feb 2023 22:54:12 +0200
+
 tox (3.28.0-2) unstable; urgency=medium
 
   * Add a dependency on python3-tomli to fix runtime failures when running
