@@ -1,16 +1,17 @@
-from __future__ import absolute_import, unicode_literals
+"""Helper methods related to graph theory."""
+from __future__ import annotations
 
 from collections import OrderedDict, defaultdict
 
 
-def stable_topological_sort(graph):
+def stable_topological_sort(graph: dict[str, set[str]]) -> list[str]:  # noqa: C901
     to_order = set(graph.keys())  # keep a log of what  we need to order
 
     # normalize graph - fill missing nodes (assume no dependency)
     for values in list(graph.values()):
         for value in values:
             if value not in graph:
-                graph[value] = ()
+                graph[value] = set()
 
     inverse_graph = defaultdict(set)
     for key, depends in graph.items():
@@ -20,7 +21,7 @@ def stable_topological_sort(graph):
     topology = []
     degree = {k: len(v) for k, v in graph.items()}
     ready_to_visit = {n for n, d in degree.items() if not d}
-    need_to_visit = OrderedDict((i, None) for i in graph.keys())
+    need_to_visit = OrderedDict((i, None) for i in graph)
     while need_to_visit:
         # to keep stable, pick the first node ready to visit in the original order
         for node in need_to_visit:
@@ -47,11 +48,11 @@ def stable_topological_sort(graph):
     return result
 
 
-def identify_cycle(graph):
-    path = OrderedDict()
+def identify_cycle(graph: dict[str, set[str]]) -> None:
+    path: dict[str, None] = OrderedDict()
     visited = set()
 
-    def visit(vertex):
+    def visit(vertex: str) -> dict[str, None] | None:
         if vertex in visited:
             return None
         visited.add(vertex)
@@ -62,7 +63,8 @@ def identify_cycle(graph):
         del path[vertex]
         return None
 
-    for node in graph:
+    for node in graph:  # pragma: no branch # we never get here if the graph is empty
         result = visit(node)
         if result is not None:
-            raise ValueError("{}".format(" | ".join(result.keys())))
+            msg = f"{' | '.join(result.keys())}"
+            raise ValueError(msg)

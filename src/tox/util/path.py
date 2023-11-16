@@ -1,26 +1,29 @@
-import errno
-import os
-import shutil
-import stat
+from __future__ import annotations
 
-from tox import reporter
+from shutil import rmtree
+from typing import TYPE_CHECKING
 
-
-def ensure_empty_dir(path):
-    if path.check():
-        reporter.info("  removing {}".format(path))
-        shutil.rmtree(str(path), onerror=_remove_readonly)
-        path.ensure(dir=1)
+if TYPE_CHECKING:
+    from pathlib import Path
 
 
-def _remove_readonly(func, path, exc_info):
-    """Clear the readonly bit and reattempt the removal."""
-    if isinstance(exc_info[1], OSError):
-        if exc_info[1].errno == errno.EACCES:
-            try:
-                os.chmod(path, stat.S_IWRITE)
-                func(path)
-            except Exception:
-                # when second attempt fails, ignore the problem
-                # to maintain some level of backward compatibility
-                pass
+def ensure_empty_dir(path: Path, except_filename: str | None = None) -> None:
+    if path.exists():
+        if path.is_dir():
+            for sub_path in path.iterdir():
+                if sub_path.name == except_filename:
+                    continue
+                if sub_path.is_dir():
+                    rmtree(sub_path, ignore_errors=True)
+                else:
+                    sub_path.unlink()
+        else:
+            path.unlink()
+            path.mkdir()
+    else:
+        path.mkdir(parents=True)
+
+
+__all__ = [
+    "ensure_empty_dir",
+]

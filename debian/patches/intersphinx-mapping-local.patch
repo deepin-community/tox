@@ -1,0 +1,25 @@
+From: Faidon Liambotis <paravoid@debian.org>
+Date: Mon, 27 Feb 2023 22:53:59 +0200
+Subject: Point intersphinx_mapping at local Python docs
+
+This reserves references to the stdlib. See #1032593 for proposed ways to avoid
+carrying this (extremely common) patch.
+
+Forwarded: not-needed
+---
+ docs/conf.py | 2 +-
+ 1 file changed, 1 insertion(+), 1 deletion(-)
+
+diff --git a/docs/conf.py b/docs/conf.py
+index 7429bfa..f9283d4 100644
+--- a/docs/conf.py
++++ b/docs/conf.py
+@@ -67,7 +67,7 @@ extlinks = {
+     "pypi": ("https://pypi.org/project/%s", "%s"),
+ }
+ intersphinx_mapping = {
+-    "python": ("https://docs.python.org/3", None),
++    "python": ("/usr/share/doc/python3-doc/html", "/usr/share/doc/python3-doc/html/objects.inv"),
+     "packaging": ("https://packaging.pypa.io/en/latest", None),
+ }
+ nitpicky = True

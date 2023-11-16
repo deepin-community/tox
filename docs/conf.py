@@ -1,141 +1,137 @@
-import os
+from __future__ import annotations
+
 import re
 import subprocess
 import sys
-from datetime import date
+from importlib.machinery import SourceFileLoader
 from pathlib import Path
+from subprocess import check_output
+from typing import TYPE_CHECKING, Any
 
-from docutils import nodes
-from sphinx import addnodes
-from sphinx.util import logging
+from sphinx.domains.python import PythonDomain
+from sphinx.ext.extlinks import ExternalLinksChecker
 
-import tox
+from tox import __version__
+
+if TYPE_CHECKING:
+    from docutils.nodes import Element, reference
+    from sphinx.addnodes import pending_xref
+    from sphinx.application import Sphinx
+    from sphinx.builders import Builder
+    from sphinx.environment import BuildEnvironment
+    from sphinx.ext.autodoc import Options
+
+company, name = "tox-dev", "tox"
+release, version = __version__, ".".join(__version__.split(".")[:2])
+copyright = f"{company}"  # noqa: A001
+master_doc, source_suffix = "index", ".rst"
+
+html_theme = "furo"
+html_title, html_last_updated_fmt = "tox", "%Y-%m-%dT%H:%M:%S"
+pygments_style, pygments_dark_style = "sphinx", "monokai"
+html_static_path, html_css_files = ["_static"], ["custom.css"]
+html_logo, html_favicon = "_static/img/tox.svg", "_static/img/toxfavi.ico"
 
 extensions = [
     "sphinx.ext.autodoc",
+    "sphinx.ext.autosectionlabel",
     "sphinx.ext.extlinks",
     "sphinx.ext.intersphinx",
-    "sphinx.ext.viewcode",
-    "sphinxcontrib.autoprogram",
+    "sphinx_argparse_cli",
+    "sphinx_autodoc_typehints",
+    "sphinx_inline_tabs",
+    "sphinx_copybutton",
 ]
-ROOT_SRC_TREE_DIR = Path(__file__).parents[1]
 
-
-def generate_draft_news():
-    home = "https://github.com"
-    issue = f"{home}/issue"
-    fragments_path = ROOT_SRC_TREE_DIR / "docs" / "changelog"
-    for pattern, replacement in (
-        (r"[^`]@([^,\s]+)", rf"`@\1 <{home}/\1>`_"),
-        (r"[^`]#([\d]+)", rf"`#pr\1 <{issue}/\1>`_"),
-    ):
-        for path in fragments_path.glob("*.rst"):
-            path.write_text(re.sub(pattern, replacement, path.read_text()))
-    env = os.environ.copy()
-    env["PATH"] += os.pathsep.join(
-        [os.path.dirname(sys.executable)] + env["PATH"].split(os.pathsep),
-    )
-    changelog = subprocess.check_output(
-        ["towncrier", "--draft", "--version", "DRAFT"],
-        cwd=str(ROOT_SRC_TREE_DIR),
-        env=env,
-    ).decode("utf-8")
-    if "No significant changes" in changelog:
-        content = ""
-    else:
-        note = "*Changes in master, but not released yet are under the draft section*."
-        content = f"{note}\n\n{changelog}"
-    (ROOT_SRC_TREE_DIR / "docs" / "_draft.rst").write_text(content)
-
-
-generate_draft_news()
-
-project = "tox"
-_full_version = tox.__version__
-release = _full_version.split("+", 1)[0]
-version = ".".join(release.split(".")[:2])
-
-author = "holger krekel and others"
-year = date.today().year
-copyright = f"2010-{year}, {author}"
-
-master_doc = "index"
-source_suffix = ".rst"
-
-exclude_patterns = ["changelog/*"]
-
-templates_path = ["_templates"]
-pygments_style = "sphinx"
-
-html_theme = "alabaster"
-html_theme_options = {
-    "logo": "img/tox.png",
-    "github_user": "tox-dev",
-    "github_repo": "tox",
-    "description": "standardise testing in Python",
-    "github_banner": "true",
-    "github_type": "star",
-    "travis_button": "false",
-    "badge_branch": "master",
-    "fixed_sidebar": "false",
+exclude_patterns = ["_build", "changelog/*", "_draft.rst"]
+autoclass_content, autodoc_member_order, autodoc_typehints = "class", "bysource", "none"
+autodoc_default_options = {
+    "member-order": "bysource",
+    "undoc-members": True,
+    "show-inheritance": True,
 }
-html_sidebars = {
-    "**": ["about.html", "localtoc.html", "relations.html", "searchbox.html", "donate.html"],
-}
-html_favicon = "_static/img/toxfavi.ico"
-html_show_sourcelink = False
-html_static_path = ["_static"]
-htmlhelp_basename = f"{project}doc"
-latex_documents = [("index", "tox.tex", f"{project} Documentation", author, "manual")]
-man_pages = [("index", project, f"{project} Documentation", [author], 1)]
-epub_title = project
-epub_author = author
-epub_publisher = author
-epub_copyright = copyright
-suppress_warnings = ["epub.unknown_project_files"]  # Prevent barking at `.ico`
-
-intersphinx_mapping = {"https://docs.python.org/": None}
-
-
-def setup(app):
-    def parse_node(env, text, node):
-        args = text.split("^")
-        name = args[0].strip()
-
-        node += addnodes.literal_strong(name, name)
-
-        if len(args) > 2:
-            default = f"={args[2].strip()}"
-            node += nodes.literal(text=default)
-
-        if len(args) > 1:
-            content = f"({args[1].strip()})"
-            node += addnodes.compact_paragraph(text=content)
-
-        return name  # this will be the link
-
-    app.add_object_type(
-        directivename="conf",
-        rolename="conf",
-        objname="configuration value",
-        indextemplate="pair: %s; configuration value",
-        parse_node=parse_node,
-    )
-
-
-tls_cacerts = os.getenv("SSL_CERT_FILE")  # we don't care here about the validity of certificates
-linkcheck_timeout = 30
-linkcheck_ignore = [r"https://holgerkrekel.net"]
+autosectionlabel_prefix_document = True
 
 extlinks = {
-    "issue": ("https://github.com/tox-dev/tox/issues/%s", "#"),
-    "pull": ("https://github.com/tox-dev/tox/pull/%s", "p"),
-    "user": ("https://github.com/%s", "@"),
+    "issue": ("https://github.com/tox-dev/tox/issues/%s", "#%s"),
+    "pull": ("https://github.com/tox-dev/tox/pull/%s", "PR #%s"),
+    "discussion": ("https://github.com/tox-dev/tox/discussions/%s", "#%s"),
+    "user": ("https://github.com/%s", "@%s"),
+    "gh_repo": ("https://github.com/%s", "%s"),
+    "gh": ("https://github.com/%s", "%s"),
+    "pypi": ("https://pypi.org/project/%s", "%s"),
 }
-
+intersphinx_mapping = {
+    "python": ("https://docs.python.org/3", None),
+    "packaging": ("https://packaging.pypa.io/en/latest", None),
+}
 nitpicky = True
-nitpick_ignore = [
-    ("py:class", "tox.interpreters.InterpreterInfo"),
+nitpick_ignore = []
+linkcheck_workers = 10
+linkcheck_ignore = [
+    re.escape(i)
+    for i in (
+        r"https://github.com/tox-dev/tox/issues/new?title=Trouble+with+development+environment",
+        r"https://www.unix.org/version2/sample/abort.html",
+    )
 ]
-# workaround for https://github.com/sphinx-doc/sphinx/issues/10112
-logging.getLogger("sphinx.ext.extlinks").setLevel(40)
+extlinks_detect_hardcoded_links = True
+
+
+def process_signature(  # noqa: PLR0913
+    app: Sphinx,  # noqa: ARG001
+    objtype: str,
+    name: str,  # noqa: ARG001
+    obj: Any,  # noqa: ARG001
+    options: Options,
+    args: str,  # noqa: ARG001
+    retann: str | None,  # noqa: ARG001
+) -> None | tuple[None, None]:
+    # skip-member is not checked for class level docs, so disable via signature processing
+    return (None, None) if objtype == "class" and "__init__" in options.get("exclude-members", set()) else None
+
+
+def setup(app: Sphinx) -> None:
+    here = Path(__file__).parent
+    # 1. run towncrier
+    root, exe = here.parent, Path(sys.executable)
+    towncrier = exe.with_name(f"towncrier{exe.suffix}")
+    cmd = [str(towncrier), "build", "--draft", "--version", "NEXT"]
+    new = check_output(cmd, cwd=root, text=True, stderr=subprocess.DEVNULL)  # noqa: S603
+    (root / "docs" / "_draft.rst").write_text("" if "No significant changes" in new else new)
+
+    class PatchedPythonDomain(PythonDomain):
+        def resolve_xref(  # noqa: PLR0913
+            self,
+            env: BuildEnvironment,
+            fromdocname: str,
+            builder: Builder,
+            type: str,  # noqa: A002
+            target: str,
+            node: pending_xref,
+            contnode: Element,
+        ) -> Element:
+            # fixup some wrongly resolved mappings
+            mapping = {
+                "_io.TextIOWrapper": "io.TextIOWrapper",
+                "tox.config.of_type.T": "typing.TypeVar",  # used by Sphinx bases
+                "tox.config.loader.api.T": "typing.TypeVar",  # used by Sphinx bases
+                "tox.config.loader.convert.T": "typing.TypeVar",  # used by Sphinx bases
+                "tox.tox_env.installer.T": "typing.TypeVar",  # used by Sphinx bases
+                "concurrent.futures._base.Future": "concurrent.futures.Future",
+            }
+            if target in mapping:
+                target = node["reftarget"] = mapping[target]
+            return super().resolve_xref(env, fromdocname, builder, type, target, node, contnode)
+
+    app.connect("autodoc-process-signature", process_signature, priority=400)
+    app.add_domain(PatchedPythonDomain, override=True)
+    tox_cfg = SourceFileLoader("tox_conf", str(here / "tox_conf.py")).load_module().ToxConfig
+    app.add_directive(tox_cfg.name, tox_cfg)
+
+    def check_uri(self: ExternalLinksChecker, refnode: reference) -> None:  #
+        if refnode.document.attributes["source"].endswith("index.rst"):
+            return None  # do not use for the index file
+        return prev_check(self, refnode)
+
+    prev_check, ExternalLinksChecker.check_uri = ExternalLinksChecker.check_uri, check_uri
