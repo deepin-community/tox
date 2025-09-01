@@ -3,7 +3,7 @@ from __future__ import annotations
 import sys
 from abc import ABC, abstractmethod
 from pathlib import Path
-from typing import TYPE_CHECKING, Any, Callable, Iterator, Mapping, Sequence, TypeVar, cast
+from typing import TYPE_CHECKING, Any, Callable, Generator, Iterator, Mapping, Sequence, TypeVar, cast
 
 from .of_type import ConfigConstantDefinition, ConfigDefinition, ConfigDynamicDefinition, ConfigLoadArgs
 from .set_env import SetEnv
@@ -32,6 +32,12 @@ class ConfigSet(ABC):
         self._alias: dict[str, str] = {}
         self._final = False
         self.register_config()
+
+    def get_configs(self) -> Generator[ConfigDefinition[Any], None, None]:
+        """:return: a mapping of config keys to their definitions"""
+        for k, v in self._defined.items():
+            if k == next(iter(v.keys)):
+                yield v
 
     @abstractmethod
     def register_config(self) -> None:
@@ -67,7 +73,7 @@ class ConfigSet(ABC):
         keys_ = self._make_keys(keys)
         definition = ConfigDynamicDefinition(keys_, desc, of_type, default, post_process, factory)
         result = self._add_conf(keys_, definition)
-        return cast(ConfigDynamicDefinition[V], result)
+        return cast("ConfigDynamicDefinition[V]", result)
 
     def add_constant(self, keys: str | Sequence[str], desc: str, value: V) -> ConfigConstantDefinition[V]:
         """
@@ -84,7 +90,7 @@ class ConfigSet(ABC):
         keys_ = self._make_keys(keys)
         definition = ConfigConstantDefinition(keys_, desc, value)
         result = self._add_conf(keys_, definition)
-        return cast(ConfigConstantDefinition[V], result)
+        return cast("ConfigConstantDefinition[V]", result)
 
     @staticmethod
     def _make_keys(keys: str | Sequence[str]) -> Sequence[str]:
@@ -94,19 +100,17 @@ class ConfigSet(ABC):
         key = keys[0]
         if key in self._defined:
             self._on_duplicate_conf(key, definition)
-        else:
-            self._keys[key] = None
-            for item in keys:
-                self._alias[item] = key
-            for key in keys:
-                self._defined[key] = definition
+
+        self._keys[key] = None
+        for item in keys:
+            self._alias[item] = key
+        for key in keys:
+            self._defined[key] = definition
         return definition
 
     def _on_duplicate_conf(self, key: str, definition: ConfigDefinition[V]) -> None:
-        earlier = self._defined[key]
-        if definition != earlier:  # pragma: no branch
-            msg = f"config {key} already defined"
-            raise ValueError(msg)
+        msg = f"duplicate configuration definition for {self.name}:\nhas: {self._defined[key]}\nnew: {definition}"
+        raise ValueError(msg)
 
     def __getitem__(self, item: str) -> Any:
         """
@@ -126,7 +130,7 @@ class ConfigSet(ABC):
         :return: the configuration value
         """
         config_definition = self._defined[item]
-        return config_definition.__call__(self._conf, self.loaders, ConfigLoadArgs(chain, self.name, self.env_name))
+        return config_definition.__call__(self._conf, self.loaders, ConfigLoadArgs(chain, self.name, self.env_name))  # noqa: PLC2801
 
     def __repr__(self) -> str:
         return f"{self.__class__.__name__}(loaders={self.loaders!r})"
@@ -184,10 +188,10 @@ class CoreConfigSet(ConfigSet):
         self.add_config(keys=["env_list", "envlist"], of_type=EnvList, default=EnvList([]), desc=desc)
 
     def _default_work_dir(self, conf: Config, env_name: str | None) -> Path:  # noqa: ARG002
-        return cast(Path, self["tox_root"] / ".tox")
+        return cast("Path", self["tox_root"] / ".tox")
 
     def _default_temp_dir(self, conf: Config, env_name: str | None) -> Path:  # noqa: ARG002
-        return cast(Path, self["work_dir"] / ".tmp")
+        return cast("Path", self["work_dir"] / ".tmp")
 
     def _work_dir_post_process(self, folder: Path) -> Path:
         return self._conf.work_dir if self._conf.options.work_dir else folder
@@ -225,7 +229,7 @@ class EnvConfigSet(ConfigSet):
 
     def __init__(self, conf: Config, section: Section, env_name: str) -> None:
         super().__init__(conf, section, env_name)
-        self.default_set_env_loader: Callable[[], Mapping[str, str]] = lambda: {}
+        self.default_set_env_loader: Callable[[], Mapping[str, str]] = dict
 
     def register_config(self) -> None:
         def set_env_post_process(values: SetEnv) -> SetEnv:
@@ -234,7 +238,17 @@ class EnvConfigSet(ConfigSet):
             return values
 
         def set_env_factory(raw: object) -> SetEnv:
-            if not isinstance(raw, str):
+            if not (
+                isinstance(raw, str)
+                or (isinstance(raw, dict) and all(isinstance(k, str) and isinstance(v, str) for k, v in raw.items()))
+                or (
+                    isinstance(raw, list)
+                    and all(
+                        isinstance(e, dict) and all(isinstance(k, str) and isinstance(v, str) for k, v in e.items())
+                        for e in raw
+                    )
+                )
+            ):
                 raise TypeError(raw)
             return SetEnv(raw, self.name, self.env_name, root)
 

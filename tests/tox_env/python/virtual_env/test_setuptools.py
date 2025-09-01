@@ -8,15 +8,15 @@ import pytest
 
 from tox.tox_env.python.package import WheelPackage
 from tox.tox_env.python.virtual_env.package.pyproject import Pep517VirtualEnvPackager
-from tox.tox_env.runner import RunToxEnv
 
 if TYPE_CHECKING:
     from pathlib import Path
 
     from tox.pytest import ToxProjectCreator
+    from tox.tox_env.runner import RunToxEnv
 
 
-@pytest.mark.integration()
+@pytest.mark.integration
 def test_setuptools_package(
     tox_project: ToxProjectCreator,
     demo_pkg_setuptools: Path,
@@ -35,7 +35,7 @@ def test_setuptools_package(
 
     outcome.assert_success()
     assert f"\ngreetings from demo_pkg_setuptools{os.linesep}" in outcome.out
-    tox_env = cast(RunToxEnv, outcome.state.envs["py"])
+    tox_env = cast("RunToxEnv", outcome.state.envs["py"])
 
     (package_env,) = list(tox_env.package_envs)
     assert isinstance(package_env, Pep517VirtualEnvPackager)
@@ -51,5 +51,5 @@ def test_setuptools_package(
     assert len(py_messages) == 5, "\n".join(py_messages)  # 1 install wheel + 3 command + 1 final report
 
     package_messages = [i for i in result if ".pkg: " in i]
-    # 1 optional hooks + 1 install requires + 1 build requires + 1 build meta + 1 build isolated + 1 exit
-    assert len(package_messages) == 6, "\n".join(package_messages)
+    # 1 optional hooks + 1 install requires + 1 build meta + 1 build isolated
+    assert len(package_messages) == 4, "\n".join(package_messages)

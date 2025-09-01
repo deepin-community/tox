@@ -27,7 +27,7 @@ def test_quickstart_ok(tox_project: ToxProjectCreator) -> None:
     text = f"""
             [tox]
             env_list =
-                py{''.join(str(i) for i in sys.version_info[0:2])}
+                py{"".join(str(i) for i in sys.version_info[0:2])}
             minversion = {version}
 
             [testenv]
@@ -52,4 +52,9 @@ def test_quickstart_refuse(tox_project: ToxProjectCreator) -> None:
 
 def test_quickstart_help(tox_project: ToxProjectCreator) -> None:
     outcome = tox_project({"tox.ini": ""}).run("q", "-h")
+    outcome.assert_success()
+
+
+def test_quickstart_no_args(tox_project: ToxProjectCreator) -> None:
+    outcome = tox_project({}).run("q")
     outcome.assert_success()

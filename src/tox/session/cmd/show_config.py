@@ -1,6 +1,8 @@
 """Show materialized configuration of tox environments."""
+
 from __future__ import annotations
 
+import os
 from textwrap import indent
 from typing import TYPE_CHECKING, Iterable
 
@@ -49,7 +51,7 @@ def show_config(state: State) -> int:
         if is_first:
             is_first = False
         else:
-            print("")  # noqa: T201
+            print()  # noqa: T201
         print_section_header(is_colored, f"[testenv:{tox_env.conf.name}]")
         if not keys:
             print_key_value(is_colored, "type", type(tox_env).__name__)
@@ -63,7 +65,7 @@ def show_config(state: State) -> int:
 
     # environments may define core configuration flags, so we must exhaust first the environments to tell the core part
     if show_everything or state.conf.options.show_core:
-        print("")  # noqa: T201
+        print()  # noqa: T201
         print_section_header(is_colored, "[tox]")
         print_conf(is_colored, state.conf.core, keys)
     return 0
@@ -85,7 +87,7 @@ def print_key_value(is_colored: bool, key: str, value: str, multi_line: bool = F
     print(_colored(is_colored, Fore.GREEN, key), end="")  # noqa: T201
     print(" =", end="")  # noqa: T201
     if multi_line:
-        print("")  # noqa: T201
+        print()  # noqa: T201
         value_str = indent(value, prefix="  ")
     else:
         print(" ", end="")  # noqa: T201
@@ -94,14 +96,16 @@ def print_key_value(is_colored: bool, key: str, value: str, multi_line: bool = F
 
 
 def print_conf(is_colored: bool, conf: ConfigSet, keys: Iterable[str]) -> None:  # noqa: FBT001
-    for key in keys if keys else conf:
+    for key in keys or conf:
         if key not in conf:
             continue
         key = conf.primary_key(key)  # noqa: PLW2901
         try:
             value = conf[key]
             as_str, multi_line = stringify(value)
-        except Exception as exception:  # because e.g. the interpreter cannot be found  # noqa: BLE001
+        except Exception as exception:  # because e.g. the interpreter cannot be found
+            if os.environ.get("_TOX_SHOW_CONFIG_RAISE"):  # pragma: no branch
+                raise  # pragma: no cover
             as_str, multi_line = _colored(is_colored, Fore.LIGHTRED_EX, f"# Exception: {exception!r}"), False
         if multi_line and "\n" not in as_str:
             multi_line = False

@@ -1,8 +1,8 @@
 from __future__ import annotations
 
 import glob
-import shutil
 import tarfile
+from abc import ABC
 from functools import partial
 from io import TextIOWrapper
 from pathlib import Path
@@ -36,14 +36,10 @@ if TYPE_CHECKING:
 from importlib.metadata import Distribution
 
 
-class VirtualEnvCmdBuilder(PythonPackageToxEnv, VirtualEnv):
+class VenvCmdBuilder(PythonPackageToxEnv, ABC):
     def __init__(self, create_args: ToxEnvCreateArgs) -> None:
         super().__init__(create_args)
         self._sdist_meta_tox_env: Pep517VirtualEnvPackager | None = None
-
-    @staticmethod
-    def id() -> str:  # noqa: A003
-        return "virtualenv-cmd-builder"
 
     def register_config(self) -> None:
         super().register_config()
@@ -76,7 +72,7 @@ class VirtualEnvCmdBuilder(PythonPackageToxEnv, VirtualEnv):
         )
 
     def requires(self) -> PythonDeps:
-        return cast(PythonDeps, self.conf["deps"])
+        return cast("PythonDeps", self.conf["deps"])
 
     def perform_packaging(self, for_env: EnvConfigSet) -> list[Package]:
         self.setup()
@@ -108,11 +104,10 @@ class VirtualEnvCmdBuilder(PythonPackageToxEnv, VirtualEnv):
             package: Package = WheelPackage(path, deps)
         else:  # must be source distribution
             work_dir = self.env_tmp_dir / "sdist-extract"
-            if work_dir.exists():  # pragma: no branch
-                shutil.rmtree(work_dir)  # pragma: no cover
-            work_dir.mkdir()
+            if not work_dir.exists():  # pragma: no branch
+                work_dir.mkdir()
             with tarfile.open(str(path), "r:gz") as tar:
-                tar.extractall(path=str(work_dir))
+                tar.extractall(path=str(work_dir))  # noqa: S202
             # the register run env is guaranteed to be called before this
             assert self._sdist_meta_tox_env is not None  # noqa: S101
             with self._sdist_meta_tox_env.display_context(self._has_display_suspended):
@@ -126,11 +121,17 @@ class VirtualEnvCmdBuilder(PythonPackageToxEnv, VirtualEnv):
         yield from super().register_run_env(run_env)
         # in case the outcome is a sdist we'll use this to find out its metadata
         result = yield f"{self.conf.name}_sdist_meta", Pep517VirtualEnvPackager.id()
-        self._sdist_meta_tox_env = cast(Pep517VirtualEnvPackager, result)
+        self._sdist_meta_tox_env = cast("Pep517VirtualEnvPackager", result)
 
     def child_pkg_envs(self, run_conf: EnvConfigSet) -> Iterator[PackageToxEnv]:  # noqa: ARG002
         if self._sdist_meta_tox_env is not None:  # pragma: no branch
             yield self._sdist_meta_tox_env
+
+
+class VirtualEnvCmdBuilder(VenvCmdBuilder, VirtualEnv):
+    @staticmethod
+    def id() -> str:
+        return "virtualenv-cmd-builder"
 
 
 class WheelDistribution(Distribution):  # cannot subclass has type Any
@@ -160,10 +161,16 @@ class WheelDistribution(Distribution):  # cannot subclass has type Any
             except KeyError:
                 return None
 
-    def locate_file(self, path: str | PathLike[str]) -> PathLike[str]:
+    def locate_file(self, path: str | PathLike[str]) -> Path:
         return self._wheel / path  # pragma: no cover # not used by us, but part of the ABC
 
 
 @impl
 def tox_register_tox_env(register: ToxEnvRegister) -> None:
     register.add_package_env(VirtualEnvCmdBuilder)
+
+
+__all__ = [
+    "VenvCmdBuilder",
+    "VirtualEnvCmdBuilder",
+]

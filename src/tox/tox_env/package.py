@@ -1,4 +1,5 @@
 """A tox environment that can build packages."""
+
 from __future__ import annotations
 
 from abc import ABC, abstractmethod
@@ -45,7 +46,7 @@ def _lock_method(thread_lock: RLock, file_lock: FileLock | None, meth: Callable[
                 return meth(*args, **kwargs)
             finally:
                 if file_locks:
-                    cast(FileLock, file_lock).release()
+                    cast("FileLock", file_lock).release()
 
     return _func
 
@@ -72,13 +73,13 @@ class PackageToxEnv(ToxEnv, ABC):
         self.core.add_config(
             keys=["package_root", "setupdir"],
             of_type=Path,
-            default=cast(Path, self.core["tox_root"]),
+            default=cast("Path", self.core["tox_root"]),
             desc="indicates where the packaging root file exists (historically setup.py file or pyproject.toml now)",
         )
         self.conf.add_config(
             keys=["package_root", "setupdir"],
             of_type=Path,
-            default=cast(Path, self.core["package_root"]),
+            default=cast("Path", self.core["package_root"]),
             desc="indicates where the packaging root file exists (historically setup.py file or pyproject.toml now)",
         )
 
@@ -89,7 +90,7 @@ class PackageToxEnv(ToxEnv, ABC):
     def perform_packaging(self, for_env: EnvConfigSet) -> list[Package]:
         raise NotImplementedError
 
-    def register_run_env(self, run_env: RunToxEnv) -> Generator[tuple[str, str], PackageToxEnv, None]:  # noqa: ARG002
+    def register_run_env(self, run_env: RunToxEnv) -> Generator[tuple[str, str], PackageToxEnv, None]:  # noqa: ARG002, PLR6301
         yield from ()  # empty generator by default
 
     def mark_active_run_env(self, run_env: RunToxEnv) -> None:

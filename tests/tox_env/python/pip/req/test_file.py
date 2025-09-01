@@ -401,7 +401,7 @@ def test_requirements_file_missing(tmp_path: Path) -> None:
     requirements_file = tmp_path / "req.txt"
     requirements_file.write_text("-r one.txt")
     req_file = RequirementsFile(requirements_file, constraint=False)
-    with pytest.raises(ValueError, match="No such file or directory: .*one.txt"):
+    with pytest.raises(ValueError, match=r"No such file or directory: .*one.txt"):
         assert req_file.options
 
 
@@ -423,7 +423,7 @@ def test_req_path_with_space_escape(tmp_path: Path) -> None:
     dep_requirements_file = tmp_path / "a b"
     dep_requirements_file.write_text("c")
     path = f"-r {dep_requirements_file!s}"
-    path = f'{path[:-len("a b")]}a\\ b'
+    path = f"{path[: -len('a b')]}a\\ b"
 
     requirements_file = tmp_path / "req.txt"
     requirements_file.write_text(path)
@@ -479,7 +479,7 @@ def test_parsed_requirement_repr_no_opt(tmp_path: Path) -> None:
 
 @pytest.mark.parametrize("flag", ["-r", "--requirement", "-c", "--constraint"])
 def test_req_over_http(tmp_path: Path, flag: str, mocker: MockerFixture) -> None:
-    is_constraint = flag in ("-c", "--constraint")
+    is_constraint = flag in {"-c", "--constraint"}
     url_open = mocker.patch("tox.tox_env.python.pip.req.file.urlopen", autospec=True)
     url_open.return_value.__enter__.return_value = BytesIO(b"-i i\na")
     requirements_txt = tmp_path / "req.txt"

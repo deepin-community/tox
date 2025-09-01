@@ -9,12 +9,20 @@ from tox.report import HandledError
 
 from .legacy_toml import LegacyToml
 from .setup_cfg import SetupCfg
+from .toml_pyproject import TomlPyProject
+from .toml_tox import TomlTox
 from .tox_ini import ToxIni
 
 if TYPE_CHECKING:
     from .api import Source
 
-SOURCE_TYPES: tuple[type[Source], ...] = (ToxIni, SetupCfg, LegacyToml)
+SOURCE_TYPES: tuple[type[Source], ...] = (
+    ToxIni,
+    SetupCfg,
+    LegacyToml,
+    TomlPyProject,
+    TomlTox,
+)
 
 
 def discover_source(config_file: Path | None, root_dir: Path | None) -> Source:
@@ -60,8 +68,8 @@ def _locate_source() -> Source | None:
 
 def _load_exact_source(config_file: Path) -> Source:
     # if the filename matches to the letter some config file name do not fallback to other source types
-    exact_match = next((s for s in SOURCE_TYPES if config_file.name == s.FILENAME), None)  # pragma: no cover
-    for src_type in (exact_match,) if exact_match is not None else SOURCE_TYPES:  # pragma: no branch
+    exact_match = [s for s in SOURCE_TYPES if config_file.name == s.FILENAME]  # pragma: no cover
+    for src_type in exact_match or SOURCE_TYPES:  # pragma: no branch
         try:
             return src_type(config_file)
         except ValueError:  # noqa: PERF203
@@ -79,7 +87,8 @@ def _create_default_source(root_dir: Path | None) -> Source:
                 break
     else:  # if not set use where we find pyproject.toml in the tree or cwd
         empty = root_dir
-    logging.warning("No %s found, assuming empty tox.ini at %s", " or ".join(i.FILENAME for i in SOURCE_TYPES), empty)
+    names = " or ".join({i.FILENAME: None for i in SOURCE_TYPES})
+    logging.warning("No %s found, assuming empty tox.ini at %s", names, empty)
     return ToxIni(empty / "tox.ini", content="")
 
 

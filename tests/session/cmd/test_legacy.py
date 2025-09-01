@@ -65,7 +65,9 @@ def test_legacy_list_env_with_no_tox_file(tox_project: ToxProjectCreator) -> Non
     project = tox_project({})
     outcome = project.run("le", "-l")
     outcome.assert_success()
-    out = f"ROOT: No tox.ini or setup.cfg or pyproject.toml found, assuming empty tox.ini at {project.path}\n"
+    out = (
+        f"ROOT: No tox.ini or setup.cfg or pyproject.toml or tox.toml found, assuming empty tox.ini at {project.path}\n"
+    )
     assert not outcome.err
     assert outcome.out == out
 
@@ -115,6 +117,18 @@ def test_legacy_run_parallel(tox_project: ToxProjectCreator, mocker: MockerFixtu
 
 def test_legacy_run_sequential(tox_project: ToxProjectCreator, mocker: MockerFixture) -> None:
     run_sequential = mocker.patch("tox.session.cmd.legacy.run_sequential")
+
+    tox_project({"tox.ini": ""}).run("le", "-e", "py")
+
+    assert run_sequential.call_count == 1
+
+
+def test_legacy_run_sequential_ci(
+    tox_project: ToxProjectCreator, mocker: MockerFixture, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Test legacy run sequential in CI by default."""
+    run_sequential = mocker.patch("tox.session.cmd.legacy.run_sequential")
+    monkeypatch.setenv("CI", "1")
 
     tox_project({"tox.ini": ""}).run("le", "-e", "py")
 

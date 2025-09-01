@@ -1,4 +1,5 @@
 """A minimal non-colored version of https://pypi.org/project/halo, to track list progress."""
+
 from __future__ import annotations
 
 import os
@@ -10,6 +11,11 @@ from collections import OrderedDict
 from typing import IO, TYPE_CHECKING, NamedTuple, Sequence, TypeVar
 
 from colorama import Fore
+
+if sys.version_info >= (3, 11):  # pragma: >=3.11 cover
+    from typing import Self
+else:  # pragma: <3.11 cover
+    from typing_extensions import Self
 
 if TYPE_CHECKING:
     from types import TracebackType
@@ -53,7 +59,7 @@ class Spinner:
     UNICODE_OUTCOME = Outcome(ok="✔", fail="✖", skip="⚠")
     ASCII_OUTCOME = Outcome(ok="+", fail="!", skip="?")
 
-    def __init__(  # noqa: PLR0913
+    def __init__(
         self,
         enabled: bool = True,  # noqa: FBT001, FBT002
         refresh_rate: float = 0.1,
@@ -103,7 +109,7 @@ class Spinner:
         text_frame = textwrap.shorten(text_frame, width=self.max_width - 1, placeholder="...")
         return f"{frame} {text_frame}"
 
-    def __enter__(self: T) -> T:
+    def __enter__(self) -> Self:
         if self.enabled:
             self.disable_cursor()
         self.render_frame()

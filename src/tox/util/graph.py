@@ -1,4 +1,5 @@
 """Helper methods related to graph theory."""
+
 from __future__ import annotations
 
 from collections import OrderedDict, defaultdict
@@ -57,8 +58,8 @@ def identify_cycle(graph: dict[str, set[str]]) -> None:
             return None
         visited.add(vertex)
         path[vertex] = None
-        for neighbour in graph.get(vertex, ()):
-            if neighbour in path or visit(neighbour):
+        for neighbor in graph.get(vertex, ()):
+            if neighbor in path or visit(neighbor):
                 return path
         del path[vertex]
         return None

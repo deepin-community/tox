@@ -1,6 +1,8 @@
 """This module pulls together this package: create and parse CLI arguments for tox."""
+
 from __future__ import annotations
 
+import locale
 import os
 from contextlib import redirect_stderr
 from pathlib import Path
@@ -45,13 +47,15 @@ def _get_base(args: Sequence[str]) -> tuple[int, ToxHandler, Source]:
     tox_parser = ToxParser.base()
     parsed = Parsed()
     try:
-        with Path(os.devnull).open("w") as file_handler, redirect_stderr(file_handler):
+        with Path(os.devnull).open(
+            "w", encoding=locale.getpreferredencoding(do_setlocale=False)
+        ) as file_handler, redirect_stderr(file_handler):
             tox_parser.parse_known_args(args, namespace=parsed)
     except SystemExit:
         ...  # ignore parse errors, such as -va raises ignored explicit argument 'a'
     guess_verbosity = parsed.verbosity
     handler = setup_report(guess_verbosity, parsed.is_colored)
-    from tox.plugin.manager import MANAGER  # load the plugin system right after we set up report
+    from tox.plugin.manager import MANAGER  # load the plugin system right after we set up report  # noqa: PLC0415
 
     source = discover_source(parsed.config_file, parsed.root_dir)
 
@@ -63,7 +67,7 @@ def _get_base(args: Sequence[str]) -> tuple[int, ToxHandler, Source]:
 def _get_all(args: Sequence[str]) -> tuple[Parsed, dict[str, Callable[[State], int]]]:
     """Parse all the options."""
     tox_parser = _get_parser()
-    parsed = cast(Parsed, tox_parser.parse_args(args))
+    parsed = cast("Parsed", tox_parser.parse_args(args))
     handlers = {k: p for k, (_, p) in tox_parser.handlers.items()}
     return parsed, handlers
 
@@ -71,7 +75,7 @@ def _get_all(args: Sequence[str]) -> tuple[Parsed, dict[str, Callable[[State], i
 def _get_parser() -> ToxParser:
     tox_parser = ToxParser.core()  # load the core options
     # plus options setup by plugins
-    from tox.plugin.manager import MANAGER
+    from tox.plugin.manager import MANAGER  # noqa: PLC0415
 
     MANAGER.tox_add_option(tox_parser)
     tox_parser.fix_defaults()
@@ -80,7 +84,7 @@ def _get_parser() -> ToxParser:
 
 def _get_parser_doc() -> ToxParser:
     # trigger register of tox env types (during normal run we call this later to handle plugins)
-    from tox.plugin.manager import MANAGER  # pragma: no cover
+    from tox.plugin.manager import MANAGER  # pragma: no cover  # noqa: PLC0415
 
     MANAGER.load_plugins(Path.cwd())
 
@@ -88,6 +92,6 @@ def _get_parser_doc() -> ToxParser:
 
 
 __all__ = (
-    "get_options",
     "Options",
+    "get_options",
 )

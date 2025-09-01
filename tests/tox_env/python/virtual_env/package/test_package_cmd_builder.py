@@ -35,7 +35,17 @@ def test_tox_install_pkg_wheel(tox_project: ToxProjectCreator, pkg_with_extras_p
     assert calls == expected
 
 
-@pytest.fixture()
+@pytest.fixture(scope="session")
+def pkg_with_sdist(
+    pkg_with_extras_project: Path,
+    pkg_builder: Callable[[Path, Path, list[str], bool], Path],
+) -> Path:
+    dist = pkg_with_extras_project / "dist"
+    pkg_builder(dist, pkg_with_extras_project, ["sdist"], False)
+    return next(dist.iterdir())
+
+
+@pytest.fixture
 def pkg_with_extras_project_sdist(
     pkg_with_extras_project: Path,
     pkg_builder: Callable[[Path, Path, list[str], bool], Path],
@@ -57,11 +67,9 @@ def test_tox_install_pkg_sdist(tox_project: ToxProjectCreator, pkg_with_extras_p
         (".pkg_external_sdist_meta", "_optional_hooks", []),
         (".pkg_external_sdist_meta", "get_requires_for_build_sdist", []),
         (".pkg_external_sdist_meta", "get_requires_for_build_wheel", []),  # required before prepare_metadata*
-        (".pkg_external_sdist_meta", "install_requires_for_build_wheel", ["wheel"]),
         (".pkg_external_sdist_meta", "prepare_metadata_for_build_wheel", []),
         ("py", "install_package_deps", deps),
         ("py", "install_package", ["--force-reinstall", "--no-deps", str(pkg_with_extras_project_sdist)]),
-        (".pkg_external_sdist_meta", "_exit", []),
     ]
 
 
@@ -162,3 +170,22 @@ def test_tox_install_pkg_with_skip_install(
     project = tox_project({"tox.ini": ini, "pyproject.toml": (demo_pkg_inline / "pyproject.toml").read_text()})
     result = project.run("-e", "py", "--installpkg", str(demo_pkg_inline_wheel))
     result.assert_success()
+
+
+def test_run_installpkg_targz(
+    tox_project: ToxProjectCreator,
+    pkg_with_sdist: Path,
+    enable_pip_pypi_access: str | None,  # noqa: ARG001
+) -> None:
+    project = tox_project({
+        "tox.ini": """
+     [tox]
+    envlist = base, flake8
+    [testenv]
+    package = sdist
+    [testenv:base]
+    [testenv:flake8]
+    """
+    })
+    outcome = project.run(f"--installpkg={pkg_with_sdist}")
+    outcome.assert_success()

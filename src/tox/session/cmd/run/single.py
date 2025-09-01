@@ -1,4 +1,5 @@
 """Defines how to run a single tox environment."""
+
 from __future__ import annotations
 
 import logging
@@ -51,7 +52,7 @@ def _evaluate(tox_env: RunToxEnv, no_test: bool) -> tuple[bool, int, list[Outcom
             skipped = True
         except ToxBackendFailed as exception:
             LOGGER.error("%s", exception)  # noqa: TRY400
-            raise SystemExit(exception.code)  # noqa: B904, TRY200
+            raise SystemExit(exception.code)  # noqa: B904
         except Fail as exception:
             LOGGER.error("failed with %s", exception)  # noqa: TRY400
             code = 1
@@ -61,7 +62,7 @@ def _evaluate(tox_env: RunToxEnv, no_test: bool) -> tuple[bool, int, list[Outcom
         finally:
             tox_env.teardown()
     except SystemExit as exception:  # setup command fails (interrupted or via invocation)
-        code = cast(int, exception.code)
+        code = cast("int", exception.code)
     return skipped, code, outcomes
 
 
@@ -70,7 +71,7 @@ def run_commands(tox_env: RunToxEnv, no_test: bool) -> tuple[int, list[Outcome]]
     if no_test:
         exit_code = Outcome.OK
     else:
-        from tox.plugin.manager import MANAGER  # importing this here to avoid circular import
+        from tox.plugin.manager import MANAGER  # importing this here to avoid circular import  # noqa: PLC0415
 
         chdir: Path = tox_env.conf["change_dir"]
         chdir.mkdir(exist_ok=True, parents=True)
@@ -111,21 +112,24 @@ def run_command_set(
         )
         outcomes.append(current_outcome)
         try:
-            current_outcome.assert_success()
+            if cmd.invert_exit_code:
+                current_outcome.assert_failure()
+            else:
+                current_outcome.assert_success()
         except SystemExit as exception:
             if cmd.ignore_exit_code:
                 logging.warning("command failed but is marked ignore outcome so handling it as success")
                 continue
             if ignore_errors:
                 if exit_code == Outcome.OK:
-                    exit_code = cast(int, exception.code)  # ignore errors continues ahead but saves the exit code
+                    exit_code = cast("int", exception.code)  # ignore errors continues ahead but saves the exit code
                 continue
-            return cast(int, exception.code)
+            return cast("int", exception.code)
     return exit_code
 
 
 __all__ = (
-    "run_one",
-    "run_command_set",
     "ToxEnvRunResult",
+    "run_command_set",
+    "run_one",
 )

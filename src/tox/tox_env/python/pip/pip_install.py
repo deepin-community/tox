@@ -1,6 +1,8 @@
 from __future__ import annotations
 
 import logging
+import operator
+from abc import ABC, abstractmethod
 from collections import defaultdict
 from pathlib import Path
 from typing import TYPE_CHECKING, Any, Callable, Sequence
@@ -20,14 +22,36 @@ if TYPE_CHECKING:
     from tox.tox_env.package import PathPackage
 
 
-class Pip(Installer[Python]):
-    """Pip is a python installer that can install packages as defined by PEP-508 and PEP-517."""
-
+class PythonInstallerListDependencies(Installer[Python], ABC):
     def __init__(self, tox_env: Python, with_list_deps: bool = True) -> None:  # noqa: FBT001, FBT002
         self._with_list_deps = with_list_deps
         super().__init__(tox_env)
 
     def _register_config(self) -> None:
+        if self._with_list_deps:  # pragma: no branch
+            self._env.conf.add_config(
+                keys=["list_dependencies_command"],
+                of_type=Command,
+                default=Command(self.freeze_cmd()),
+                desc="command used to list installed packages",
+            )
+
+    @abstractmethod
+    def freeze_cmd(self) -> list[str]:
+        raise NotImplementedError
+
+    def installed(self) -> list[str]:
+        cmd: Command = self._env.conf["list_dependencies_command"]
+        result = self._env.execute(cmd=cmd.args, stdin=StdinSource.OFF, run_id="freeze", show=False)
+        result.assert_success()
+        return result.out.splitlines()
+
+
+class Pip(PythonInstallerListDependencies):
+    """Pip is a python installer that can install packages as defined by PEP-508 and PEP-517."""
+
+    def _register_config(self) -> None:
+        super()._register_config()
         self._env.conf.add_config(
             keys=["pip_pre"],
             of_type=bool,
@@ -53,13 +77,9 @@ class Pip(Installer[Python]):
             default=False,
             desc="Use the exact versions of installed deps as constraints, otherwise use the listed deps.",
         )
-        if self._with_list_deps:  # pragma: no branch
-            self._env.conf.add_config(
-                keys=["list_dependencies_command"],
-                of_type=Command,
-                default=Command(["python", "-m", "pip", "freeze", "--all"]),
-                desc="command used to list installed packages",
-            )
+
+    def freeze_cmd(self) -> list[str]:  # noqa: PLR6301
+        return ["python", "-m", "pip", "freeze", "--all"]
 
     def default_install_command(self, conf: Config, env_name: str | None) -> Command:  # noqa: ARG002
         isolated_flag = "-E" if self._env.base_python.version_info.major == 2 else "-I"  # noqa: PLR2004
@@ -81,12 +101,6 @@ class Pip(Installer[Python]):
                 install_command.pop(opts_at)
         return cmd
 
-    def installed(self) -> list[str]:
-        cmd: Command = self._env.conf["list_dependencies_command"]
-        result = self._env.execute(cmd=cmd.args, stdin=StdinSource.OFF, run_id="freeze", show=False)
-        result.assert_success()
-        return result.out.splitlines()
-
     def install(self, arguments: Any, section: str, of_type: str) -> None:
         if isinstance(arguments, PythonDeps):
             self._install_requirement_file(arguments, section, of_type)
@@ -107,7 +121,7 @@ class Pip(Installer[Python]):
     def use_frozen_constraints(self) -> bool:
         return bool(self._env.conf["use_frozen_constraints"])
 
-    def _install_requirement_file(self, arguments: PythonDeps, section: str, of_type: str) -> None:
+    def _install_requirement_file(self, arguments: PythonDeps, section: str, of_type: str) -> None:  # noqa: C901
         try:
             new_options, new_reqs = arguments.unroll()
         except ValueError as exception:
@@ -132,7 +146,9 @@ class Pip(Installer[Python]):
             if not eq:  # pragma: no branch
                 if old is not None:
                     self._recreate_if_diff("install flag(s)", new_options, old["options"], lambda i: i)
-                    self._recreate_if_diff("constraint(s)", new_constraints, old["constraints"], lambda i: i[3:])
+                    self._recreate_if_diff(
+                        "constraint(s)", new_constraints, old["constraints"], operator.itemgetter(slice(3, None))
+                    )
                     missing_requirement = set(old["requirements"]) - set(new_requirements)
                     if missing_requirement:
                         msg = f"requirements removed: {' '.join(missing_requirement)}"
@@ -145,7 +161,15 @@ class Pip(Installer[Python]):
                 if args:  # pragma: no branch
                     self._execute_installer(args, of_type)
                     if self.constrain_package_deps and not self.use_frozen_constraints:
-                        combined_constraints = new_requirements + [c.lstrip("-c ") for c in new_constraints]
+                        # when we drop Python 3.8 we can use the builtin `.removeprefix`
+                        def remove_prefix(text: str, prefix: str) -> str:
+                            if text.startswith(prefix):
+                                return text[len(prefix) :]
+                            return text
+
+                        combined_constraints = new_requirements + [
+                            remove_prefix(text=c, prefix="-c ") for c in new_constraints
+                        ]
                         self.constraints_file().write_text("\n".join(combined_constraints))
 
     @staticmethod
@@ -228,4 +252,7 @@ class Pip(Installer[Python]):
         return install_command[:opts_at] + list(args) + install_command[opts_at + 1 :]
 
 
-__all__ = ("Pip",)
+__all__ = [
+    "Pip",
+    "PythonInstallerListDependencies",
+]

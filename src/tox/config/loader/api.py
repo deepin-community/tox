@@ -5,6 +5,7 @@ from argparse import ArgumentTypeError
 from typing import TYPE_CHECKING, Any, List, Mapping, TypeVar
 
 from tox.plugin import impl
+from tox.tox_env.python.pip.req_file import PythonDeps
 
 from .convert import Convert, Factory
 from .str_convert import StrConvert
@@ -16,7 +17,7 @@ if TYPE_CHECKING:
     from .section import Section
 
 
-class Override:
+class Override:  # noqa: PLW1641
     """An override for config definitions."""
 
     def __init__(self, value: str) -> None:
@@ -39,7 +40,7 @@ class Override:
         return f"{self.namespace}{'.' if self.namespace else ''}{self.key}={self.value}"
 
     def __eq__(self, other: object) -> bool:
-        if type(self) != type(other):
+        if type(self) != type(other):  # noqa: E721
             return False
         return (self.namespace, self.key, self.value) == (
             other.namespace,  # type: ignore[attr-defined]
@@ -76,15 +77,21 @@ V = TypeVar("V")
 
 
 class Loader(Convert[T]):
-    """Loader loads a configuration value and converts it."""
+    """Loader loads configuration values and converts it.
+
+    :param overrides: A list of overrides to be applied.
+    """
 
     def __init__(self, section: Section, overrides: list[Override]) -> None:
         self._section = section
-        self.overrides: dict[str, Override] = {o.key: o for o in overrides}
+        self.overrides: dict[str, list[Override]] = {}
+        for override in overrides:
+            self.overrides.setdefault(override.key, []).append(override)
         self.parent: Loader[Any] | None = None
 
     @property
     def section(self) -> Section:
+        """Return the section of the configuration from where the values are extracted."""
         return self._section
 
     @abstractmethod
@@ -109,7 +116,7 @@ class Loader(Convert[T]):
     def __contains__(self, item: str) -> bool:
         return item in self.found_keys()
 
-    def load(  # noqa: PLR0913
+    def load(
         self,
         key: str,
         of_type: type[V],
@@ -127,31 +134,37 @@ class Loader(Convert[T]):
         :param args: the config load arguments
         :return: the converted type
         """
-        from tox.config.set_env import SetEnv
+        from tox.config.set_env import SetEnv  # noqa: PLC0415
 
-        override = self.overrides.get(key)
-        if override:
-            converted_override = _STR_CONVERT.to(override.value, of_type, factory)
-            if not override.append:
-                return converted_override
+        overrides = self.overrides.get(key, [])
+
         try:
             raw = self.load_raw(key, conf, args.env_name)
         except KeyError:
-            if override:
-                return converted_override
-            raise
-        converted = self.build(key, of_type, factory, conf, raw, args)
-        if override and override.append:
-            if isinstance(converted, list) and isinstance(converted_override, list):
-                converted += converted_override
-            elif isinstance(converted, dict) and isinstance(converted_override, dict):
-                converted.update(converted_override)
-            elif isinstance(converted, SetEnv) and isinstance(converted_override, SetEnv):
-                converted.update(converted_override, override=True)
+            converted = None
+            if not overrides:
+                raise
+        else:
+            converted = self.build(key, of_type, factory, conf, raw, args)
+
+        for override in overrides:
+            converted_override = _STR_CONVERT.to(override.value, of_type, factory)
+            if override.append and converted is not None:
+                if isinstance(converted, list) and isinstance(converted_override, list):
+                    converted += converted_override
+                elif isinstance(converted, dict) and isinstance(converted_override, dict):
+                    converted.update(converted_override)
+                elif isinstance(converted, SetEnv) and isinstance(converted_override, SetEnv):
+                    converted.update(converted_override, override=True)
+                elif isinstance(converted, PythonDeps) and isinstance(converted_override, PythonDeps):
+                    converted += converted_override
+                else:
+                    msg = "Only able to append to lists and dicts"
+                    raise ValueError(msg)
             else:
-                msg = "Only able to append to lists and dicts"
-                raise ValueError(msg)
-        return converted
+                converted = converted_override
+
+        return converted  # type: ignore[return-value]
 
     def build(  # noqa: PLR0913
         self,

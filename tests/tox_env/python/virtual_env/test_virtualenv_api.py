@@ -16,7 +16,7 @@ if TYPE_CHECKING:
     from tox.pytest import MonkeyPatch, ToxProject, ToxProjectCreator
 
 
-@pytest.fixture()
+@pytest.fixture
 def virtualenv_opt(monkeypatch: MonkeyPatch, mocker: MockerFixture) -> VirtualEnvOptions:
     for key in os.environ:
         if key.startswith("VIRTUALENV_"):  # pragma: no cover
@@ -132,7 +132,7 @@ def test_recreate_when_virtualenv_changes(tox_project: ToxProjectCreator, mocker
     proj = tox_project({"tox.ini": "[testenv]\npackage=skip"})
     proj.run("r")
 
-    from tox.tox_env.python.virtual_env import api
+    from tox.tox_env.python.virtual_env import api  # noqa: PLC0415
 
     mocker.patch.object(api, "virtualenv_version", "1.0")
     result = proj.run("r")

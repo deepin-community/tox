@@ -1,19 +1,29 @@
 """Customize argparse logic for tox (also contains the base options)."""
+
 from __future__ import annotations
 
 import argparse
 import logging
 import os
+import random
 import sys
-from argparse import SUPPRESS, Action, ArgumentDefaultsHelpFormatter, ArgumentParser, Namespace
+from argparse import SUPPRESS, Action, ArgumentDefaultsHelpFormatter, ArgumentError, ArgumentParser, Namespace
 from pathlib import Path
 from typing import TYPE_CHECKING, Any, Callable, Dict, List, Literal, Optional, Sequence, Tuple, Type, TypeVar, cast
 
+from colorama import Fore
+
 from tox.config.loader.str_convert import StrConvert
 from tox.plugin import NAME
+from tox.util.ci import is_ci
 
 from .env_var import get_env_var
 from .ini import IniConfig
+
+if sys.version_info >= (3, 11):  # pragma: >=3.11 cover
+    from typing import Self
+else:  # pragma: <3.11 cover
+    from typing_extensions import Self
 
 if TYPE_CHECKING:
     from tox.session.state import State
@@ -59,7 +69,7 @@ class ArgumentParserWithEnvAndConfig(ArgumentParser):
                 loc = locals()
                 loc["Literal"] = Literal
                 as_literal = f"Literal[{', '.join(repr(i) for i in action.choices)}]"
-                of_type = eval(as_literal, globals(), loc)  # noqa: PGH001, S307
+                of_type = eval(as_literal, globals(), loc)  # noqa: S307
             elif action.default is not None:
                 of_type = type(action.default)
             elif isinstance(action, argparse._StoreConstAction) and action.const is not None:  # noqa: SLF001
@@ -76,7 +86,7 @@ class ArgumentParserWithEnvAndConfig(ArgumentParser):
         res, argv = self.parse_known_args(args, namespace)
         if argv:
             self.error(
-                f'unrecognized arguments: {" ".join(argv)}\n'
+                f"unrecognized arguments: {' '.join(argv)}\n"
                 "hint: if you tried to pass arguments to a command use -- to separate them from tox ones",
             )
         return res
@@ -120,7 +130,7 @@ class Parsed(Namespace):
     @property
     def is_colored(self) -> bool:
         """:return: flag indicating if the output is colored or not"""
-        return cast(bool, self.colored == "yes")
+        return cast("bool", self.colored == "yes")
 
     exit_and_dump_after: int
 
@@ -177,11 +187,79 @@ class ToxParser(ArgumentParserWithEnvAndConfig):
                 excl_group = group.add_mutually_exclusive_group(**e_kwargs)
                 for a_args, _, a_kwargs in arguments:
                     excl_group.add_argument(*a_args, **a_kwargs)
+        self._add_provision_arguments(sub_parser)
         return sub_parser
+
+    def _add_provision_arguments(self, sub_parser: ToxParser) -> None:  # noqa: PLR6301
+        sub_parser.add_argument(
+            "--result-json",
+            dest="result_json",
+            metavar="path",
+            of_type=Path,
+            default=None,
+            help="write a JSON file with detailed information about all commands and results involved",
+        )
+
+        class SeedAction(Action):
+            def __call__(
+                self,
+                parser: ArgumentParser,  # noqa: ARG002
+                namespace: Namespace,
+                values: str | Sequence[Any] | None,
+                option_string: str | None = None,  # noqa: ARG002
+            ) -> None:
+                if values == "notset":
+                    result = None
+                else:
+                    try:
+                        result = int(cast("str", values))
+                        if result <= 0:
+                            msg = "must be greater than zero"
+                            raise ValueError(msg)  # noqa: TRY301
+                    except ValueError as exc:
+                        raise ArgumentError(self, str(exc)) from exc
+                setattr(namespace, self.dest, result)
+
+        if os.environ.get("PYTHONHASHSEED", "random") != "random":
+            hashseed_default = int(os.environ["PYTHONHASHSEED"])
+        else:
+            hashseed_default = random.randint(1, 1024 if sys.platform == "win32" else 4294967295)  # noqa: S311
+        sub_parser.add_argument(
+            "--hashseed",
+            metavar="SEED",
+            help="set PYTHONHASHSEED to SEED before running commands. Defaults to a random integer in the range "
+            "[1, 4294967295] ([1, 1024] on Windows). Passing 'notset' suppresses this behavior.",
+            action=SeedAction,
+            of_type=Optional[int],  # type: ignore[arg-type]
+            default=hashseed_default,
+            dest="hash_seed",
+        )
+        sub_parser.add_argument(
+            "--discover",
+            dest="discover",
+            nargs="+",
+            metavar="path",
+            of_type=List[str],
+            help="for Python discovery first try these Python executables",
+            default=[],
+        )
+        list_deps = sub_parser.add_mutually_exclusive_group()
+        list_deps.add_argument(
+            "--list-dependencies",
+            action="store_true",
+            default=is_ci(),
+            help="list the dependencies installed during environment setup",
+        )
+        list_deps.add_argument(
+            "--no-list-dependencies",
+            action="store_false",
+            dest="list_dependencies",
+            help="never list the dependencies installed during environment setup",
+        )
 
     def add_argument_group(self, *args: Any, **kwargs: Any) -> Any:
         result = super().add_argument_group(*args, **kwargs)
-        if self.of_cmd is None and args not in (("positional arguments",), ("optional arguments",)):
+        if self.of_cmd is None and args not in {("positional arguments",), ("optional arguments",)}:
 
             def add_mutually_exclusive_group(**e_kwargs: Any) -> Any:
                 def add_argument(*a_args: str, of_type: type[Any] | None = None, **a_kwargs: Any) -> Action:
@@ -214,11 +292,11 @@ class ToxParser(ArgumentParserWithEnvAndConfig):
         return result
 
     @classmethod
-    def base(cls: type[ToxParserT]) -> ToxParserT:
+    def base(cls) -> Self:
         return cls(add_help=False, root=True)
 
     @classmethod
-    def core(cls: type[ToxParserT]) -> ToxParserT:
+    def core(cls) -> Self:
         return cls(
             prog=NAME,
             formatter_class=HelpFormatter,
@@ -249,7 +327,7 @@ class ToxParser(ArgumentParserWithEnvAndConfig):
                 cmd_at = None
         if cmd_at is not None:  # if we found a command move it to the start
             args = args[cmd_at], *args[:cmd_at], *args[cmd_at + 1 :]
-        elif args not in (("--help",), ("-h",)) and (self._cmd is not None and "legacy" in self._cmd.choices):
+        elif tuple(args) not in {("--help",), ("-h",)} and (self._cmd is not None and "legacy" in self._cmd.choices):
             # on help no mangling needed, and we also want to insert once we have legacy to insert
             args = "legacy", *args
         result = Parsed() if namespace is None else namespace
@@ -258,7 +336,7 @@ class ToxParser(ArgumentParserWithEnvAndConfig):
 
 
 def add_verbosity_flags(parser: ArgumentParser) -> None:
-    from tox.report import LEVELS
+    from tox.report import LEVELS  # noqa: PLC0415
 
     level_map = "|".join(f"{c}={logging.getLevelName(level)}" for c, level in sorted(LEVELS.items()))
     verbosity_group = parser.add_argument_group("verbosity")
@@ -294,6 +372,12 @@ def add_color_flags(parser: ArgumentParser) -> None:
         default=color,
         choices=["yes", "no"],
         help="should output be enriched with colors, default is yes unless TERM=dumb or NO_COLOR is defined.",
+    )
+    parser.add_argument(
+        "--stderr-color",
+        default="RED",
+        choices=[*Fore.__dict__.keys()],
+        help="color for stderr output, use RESET for terminal defaults.",
     )
 
 
@@ -344,7 +428,7 @@ def add_core_arguments(parser: ArgumentParser) -> None:
 
 __all__ = (
     "DEFAULT_VERBOSITY",
+    "HelpFormatter",
     "Parsed",
     "ToxParser",
-    "HelpFormatter",
 )

@@ -1,10 +1,12 @@
 """Declare the abstract base class for tox environments that handle the Python language."""
+
 from __future__ import annotations
 
 import logging
 import re
 import sys
 from abc import ABC, abstractmethod
+from pathlib import Path
 from typing import TYPE_CHECKING, Any, List, NamedTuple, cast
 
 from virtualenv.discovery.py_spec import PythonSpec
@@ -13,8 +15,6 @@ from tox.tox_env.api import ToxEnv, ToxEnvCreateArgs
 from tox.tox_env.errors import Fail, Recreate, Skip
 
 if TYPE_CHECKING:
-    from pathlib import Path
-
     from tox.config.main import Config
 
 
@@ -50,11 +50,12 @@ class PythonInfo(NamedTuple):
 PY_FACTORS_RE = re.compile(
     r"""
     ^(?!py$)                                               # don't match 'py' as it doesn't provide any info
-    (?P<impl>py|pypy|cpython|jython|rustpython|ironpython) # the interpreter; most users will simply use 'py'
+    (?P<impl>py|pypy|cpython|jython|graalpy|rustpython|ironpython) # the interpreter; most users will simply use 'py'
     (?P<version>[2-9]\.?[0-9]?[0-9]?)?$                    # the version; one of: MAJORMINOR, MAJOR.MINOR
     """,
     re.VERBOSE,
 )
+PY_FACTORS_RE_EXPLICIT_VERSION = re.compile(r"^((?P<impl>cpython|pypy)-)?(?P<version>[2-9]\.[0-9]+)$")
 
 
 class Python(ToxEnv, ABC):
@@ -85,17 +86,17 @@ class Python(ToxEnv, ABC):
         self.conf.add_constant(
             keys=["env_site_packages_dir", "envsitepackagesdir"],
             desc="the python environments site package",
-            value=lambda: self.env_site_package_dir(),
+            value=self.env_site_package_dir,
         )
         self.conf.add_constant(
             keys=["env_bin_dir", "envbindir"],
             desc="the python environments binary folder",
-            value=lambda: self.env_bin_dir(),
+            value=self.env_bin_dir,
         )
         self.conf.add_constant(
             ["env_python", "envpython"],
             desc="python executable from within the tox environment",
-            value=lambda: self.env_python(),
+            value=self.env_python,
         )
         self.conf.add_constant("py_dot_ver", "<python major>.<python minor>", value=self.py_dot_ver)
         self.conf.add_constant("py_impl", "python implementation", value=self.py_impl)
@@ -118,6 +119,7 @@ class Python(ToxEnv, ABC):
         if sys.platform == "win32":  # pragma: win32 cover
             env.extend(
                 [
+                    "APPDATA",  # Needed for PIP platformsdirs.windows
                     "PROGRAMDATA",  # needed for discovering the VS compiler
                     "PROGRAMFILES(x86)",  # needed for discovering the VS compiler
                     "PROGRAMFILES",  # needed for discovering the VS compiler
@@ -140,16 +142,29 @@ class Python(ToxEnv, ABC):
     @classmethod
     def extract_base_python(cls, env_name: str) -> str | None:
         candidates: list[str] = []
-        for factor in env_name.split("-"):
-            match = PY_FACTORS_RE.match(factor)
-            if match:
-                candidates.append(factor)
+        match = PY_FACTORS_RE_EXPLICIT_VERSION.match(env_name)
+        if match:
+            found = match.groupdict()
+            candidates.append(f"{'pypy' if found['impl'] == 'pypy' else ''}{found['version']}")
+        else:
+            for factor in env_name.split("-"):
+                match = PY_FACTORS_RE.match(factor)
+                if match:
+                    candidates.append(factor)
         if candidates:
             if len(candidates) > 1:
                 msg = f"conflicting factors {', '.join(candidates)} in {env_name}"
                 raise ValueError(msg)
             return next(iter(candidates))
         return None
+
+    @classmethod
+    def _python_spec_for_sys_executable(cls) -> PythonSpec:
+        implementation = sys.implementation.name
+        version = sys.version_info
+        bits = "64" if sys.maxsize > 2**32 else "32"
+        string_spec = f"{implementation}{version.major}{version.minor}-{bits}"
+        return PythonSpec.from_string_spec(string_spec)
 
     @classmethod
     def _validate_base_python(
@@ -163,6 +178,12 @@ class Python(ToxEnv, ABC):
             spec_name = PythonSpec.from_string_spec(env_base_python)
             for base_python in base_pythons:
                 spec_base = PythonSpec.from_string_spec(base_python)
+                if spec_base.path is not None:
+                    path = Path(spec_base.path).absolute()
+                    if str(spec_base.path) == sys.executable:
+                        spec_base = cls._python_spec_for_sys_executable()
+                    else:
+                        spec_base = cls.python_spec_for_path(path)
                 if any(
                     getattr(spec_base, key) != getattr(spec_name, key)
                     for key in ("implementation", "major", "minor", "micro", "architecture")
@@ -174,6 +195,17 @@ class Python(ToxEnv, ABC):
                         return [env_base_python]
                     raise Fail(msg)
         return base_pythons
+
+    @classmethod
+    @abstractmethod
+    def python_spec_for_path(cls, path: Path) -> PythonSpec:
+        """
+        Get the spec for an absolute path to a Python executable.
+
+        :param path: the path investigated
+        :return: the found spec
+        """
+        raise NotImplementedError
 
     @abstractmethod
     def env_site_package_dir(self) -> Path:
@@ -219,7 +251,7 @@ class Python(ToxEnv, ABC):
         changed = [f"{k}={old[k]!r}->{v!r}" for k, v in conf.items() if k in old and v != old[k]]
         if changed:
             result.append(f"changed {' | '.join(changed)}")
-        return f'python {", ".join(result)}'
+        return f"python {', '.join(result)}"
 
     @abstractmethod
     def prepend_env_var_path(self) -> list[Path]:
@@ -258,7 +290,7 @@ class Python(ToxEnv, ABC):
                 raise Skip(msg)
             raise NoInterpreter(base_pythons)
 
-        return cast(PythonInfo, self._base_python)
+        return cast("PythonInfo", self._base_python)
 
     def _get_env_journal_python(self) -> dict[str, Any]:
         return {

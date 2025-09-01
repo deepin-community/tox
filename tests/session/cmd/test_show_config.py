@@ -94,7 +94,7 @@ def test_show_config_exception(tox_project: ToxProjectCreator) -> None:
         """,
         },
     )
-    outcome = project.run("c", "-e", "a", "-k", "env_site_packages_dir")
+    outcome = project.run("c", "-e", "a", "-k", "env_site_packages_dir", raise_on_config_fail=False)
     outcome.assert_success()
     txt = (
         "\nenv_site_packages_dir = # Exception: "
@@ -105,7 +105,7 @@ def test_show_config_exception(tox_project: ToxProjectCreator) -> None:
 
 def test_show_config_empty_install_command_exception(tox_project: ToxProjectCreator) -> None:
     project = tox_project({"tox.ini": "[testenv:a]\ninstall_command="})
-    outcome = project.run("c", "-e", "a", "-k", "install_command")
+    outcome = project.run("c", "-e", "a", "-k", "install_command", raise_on_config_fail=False)
     outcome.assert_success()
     txt = "\ninstall_command = # Exception: ValueError(\"attempting to parse '' into a command failed\")"
     assert txt in outcome.out
@@ -119,10 +119,17 @@ def test_pass_env_config_default(tox_project: ToxProjectCreator, stdout_is_atty:
     pass_env = outcome.env_conf("py")["pass_env"]
     is_win = sys.platform == "win32"
     expected = (
-        ["CC", "CCSHARED", "CFLAGS"]
+        []
+        + (["APPDATA"] if is_win else [])
+        + ["CC", "CCSHARED", "CFLAGS"]
         + (["COMSPEC"] if is_win else [])
-        + ["CPPFLAGS", "CURL_CA_BUNDLE", "CXX", "HOME", "LANG", "LANGUAGE", "LDFLAGS", "LD_LIBRARY_PATH"]
-        + (["MSYSTEM", "NUMBER_OF_PROCESSORS", "PATHEXT"] if is_win else [])
+        + ["CPPFLAGS", "CURL_CA_BUNDLE", "CXX", "FORCE_COLOR", "HOME", "LANG"]
+        + ["LANGUAGE", "LDFLAGS", "LD_LIBRARY_PATH"]
+        + (["MSYSTEM"] if is_win else [])
+        + ["NETRC"]
+        + (["NIX_LD", "NIX_LD_LIBRARY_PATH"] if not is_win else [])
+        + ["NO_COLOR"]
+        + (["NUMBER_OF_PROCESSORS", "PATHEXT"] if is_win else [])
         + ["PIP_*", "PKG_CONFIG", "PKG_CONFIG_PATH", "PKG_CONFIG_SYSROOT_DIR"]
         + (["PROCESSOR_ARCHITECTURE"] if is_win else [])
         + (["PROGRAMDATA"] if is_win else [])
@@ -132,7 +139,9 @@ def test_pass_env_config_default(tox_project: ToxProjectCreator, stdout_is_atty:
         + (["SYSTEMDRIVE", "SYSTEMROOT", "TEMP"] if is_win else [])
         + (["TERM"] if stdout_is_atty else [])
         + (["TMP", "USERPROFILE"] if is_win else ["TMPDIR"])
-        + ["VIRTUALENV_*", "http_proxy", "https_proxy", "no_proxy"]
+        + ["VIRTUALENV_*"]
+        + (["WINDIR"] if is_win else [])
+        + ["http_proxy", "https_proxy", "no_proxy"]
     )
     assert pass_env == expected
 
@@ -144,7 +153,7 @@ def test_show_config_pkg_env_once(
     prev_ver, impl = patch_prev_py(True)
     ini = f"[tox]\nenv_list=py{prev_ver},py\n[testenv]\npackage=wheel"
     project = tox_project({"tox.ini": ini, "pyproject.toml": ""})
-    result = project.run("c", "-e", "ALL")
+    result = project.run("c", "-e", "ALL", raise_on_config_fail=False)
     result.assert_success()
     parser = ConfigParser(interpolation=None)
     parser.read_string(result.out)
@@ -156,10 +165,10 @@ def test_show_config_pkg_env_skip(
     tox_project: ToxProjectCreator,
     patch_prev_py: Callable[[bool], tuple[str, str]],
 ) -> None:
-    prev_ver, impl = patch_prev_py(False)
+    prev_ver, _impl = patch_prev_py(False)
     ini = f"[tox]\nenv_list=py{prev_ver},py\n[testenv]\npackage=wheel"
     project = tox_project({"tox.ini": ini, "pyproject.toml": ""})
-    result = project.run("c", "-e", "ALL")
+    result = project.run("c", "-e", "ALL", raise_on_config_fail=False)
     result.assert_success()
     parser = ConfigParser(interpolation=None)
     parser.read_string(result.out)
@@ -262,7 +271,7 @@ def test_show_config_matching_env_section(tox_project: ToxProjectCreator) -> Non
 
 
 def test_package_env_inherits_from_pkgenv(tox_project: ToxProjectCreator, demo_pkg_inline: Path) -> None:
-    project = tox_project({"tox.ini": "[pkgenv]\npass_env = A, B\ndeps=C\n D"})
+    project = tox_project({"tox.ini": "[pkgenv]\npass_env = A, AA\ndeps=C\n D"})
     outcome = project.run("c", "--root", str(demo_pkg_inline), "-k", "deps", "pass_env", "-e", "py,.pkg")
     outcome.assert_success()
     exp = """
@@ -272,7 +281,14 @@ def test_package_env_inherits_from_pkgenv(tox_project: ToxProjectCreator, demo_p
       D
     pass_env =
       A
-      B
+      AA
     """
     exp = dedent(exp)
     assert exp in outcome.out
+
+
+def test_core_on_platform(tox_project: ToxProjectCreator) -> None:
+    project = tox_project({"tox.ini": "[tox]\nno_package = true"})
+    result = project.run("c", "-e", "py", "--core", "-k", "on_platform")
+    result.assert_success()
+    assert result.out == f"[testenv:py]\n\n[tox]\non_platform = {sys.platform}\n"

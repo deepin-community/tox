@@ -1,13 +1,17 @@
 """Declare the abstract base class for tox environments that handle the Python language via the virtualenv project."""
+
 from __future__ import annotations
 
 import os
 import sys
+from abc import ABC
 from pathlib import Path
 from typing import TYPE_CHECKING, Any, cast
 
 from virtualenv import __version__ as virtualenv_version
-from virtualenv import session_via_cli
+from virtualenv import app_data, session_via_cli
+from virtualenv.discovery import cached_py_info
+from virtualenv.discovery.py_spec import PythonSpec
 
 from tox.config.loader.str_convert import StrConvert
 from tox.execute.local_sub_process import LocalSubProcessExecutor
@@ -16,13 +20,14 @@ from tox.tox_env.python.pip.pip_install import Pip
 
 if TYPE_CHECKING:
     from virtualenv.create.creator import Creator
+    from virtualenv.discovery.py_info import PythonInfo as VirtualenvPythonInfo
     from virtualenv.run.session import Session
 
     from tox.execute.api import Execute
     from tox.tox_env.api import ToxEnvCreateArgs
 
 
-class VirtualEnv(Python):
+class VirtualEnv(Python, ABC):
     """A python executor that uses the virtualenv project with pip."""
 
     def __init__(self, create_args: ToxEnvCreateArgs) -> None:
@@ -149,13 +154,13 @@ class VirtualEnv(Python):
         return list(dict.fromkeys((self.creator.bin_dir, self.creator.script_dir)))
 
     def env_site_package_dir(self) -> Path:
-        return cast(Path, self.creator.purelib)
+        return cast("Path", self.creator.purelib)
 
     def env_python(self) -> Path:
-        return cast(Path, self.creator.exe)
+        return cast("Path", self.creator.exe)
 
     def env_bin_dir(self) -> Path:
-        return cast(Path, self.creator.script_dir)
+        return cast("Path", self.creator.script_dir)
 
     @property
     def runs_on_platform(self) -> str:
@@ -166,3 +171,30 @@ class VirtualEnv(Python):
         environment_variables = super().environment_variables
         environment_variables["VIRTUAL_ENV"] = str(self.conf["env_dir"])
         return environment_variables
+
+    @classmethod
+    def python_spec_for_path(cls, path: Path) -> PythonSpec:
+        """
+        Get the spec for an absolute path to a Python executable.
+
+        :param path: the path investigated
+        :return: the found spec
+        """
+        info = cls.get_virtualenv_py_info(path)
+        return PythonSpec.from_string_spec(
+            f"{info.implementation}{info.version_info.major}{info.version_info.minor}-{info.architecture}"
+        )
+
+    @staticmethod
+    def get_virtualenv_py_info(path: Path) -> VirtualenvPythonInfo:
+        """
+        Get the version info for an absolute path to a Python executable.
+
+        :param path: the path investigated
+        :return: the found information (cached)
+        """
+        return cached_py_info.from_exe(
+            cached_py_info.PythonInfo,
+            app_data.make_app_data(None, read_only=False, env=os.environ),
+            str(path),
+        )

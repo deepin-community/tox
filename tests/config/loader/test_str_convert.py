@@ -57,12 +57,27 @@ def test_str_convert_ok(raw: str, value: Any, of_type: type[Any]) -> None:
     assert result == value
 
 
+# Tests that can work only with py39 or newer due to type not being subscriptible before
+if sys.version_info >= (3, 9):
+
+    @pytest.mark.parametrize(
+        ("raw", "value", "of_type"),
+        [
+            ("", None, Optional[list[str]]),
+            ("1,2", ["1", "2"], Optional[list[str]]),
+        ],
+    )
+    def test_str_convert_ok_py39(raw: str, value: Any, of_type: type[Any]) -> None:
+        result = StrConvert().to(raw, of_type, None)
+        assert result == value
+
+
 @pytest.mark.parametrize(
     ("raw", "of_type", "exc_type", "msg"),
     [
         ("a", TypeVar, TypeError, r"a cannot cast to .*typing.TypeVar.*"),
         ("3", Literal["1", "2"], ValueError, r"3 must be one of \('1', '2'\)"),
-        ("3", Union[str, int], TypeError, r"3 cannot cast to typing.Union\[str, int\]"),
+        ("3", Union[str, int], TypeError, r"3 cannot cast to (typing.Union\[str, int\]|str \| int)"),
         ("", Command, ValueError, r"attempting to parse '' into a command failed"),
     ],
 )
@@ -79,8 +94,9 @@ def test_str_convert_nok(raw: str, of_type: type[Any], msg: str, exc_type: type[
     ],
 )
 def test_invalid_shell_expression(value: str, expected: list[str]) -> None:
-    result = StrConvert().to_command(value).args
-    assert result == expected
+    result = StrConvert().to_command(value)
+    assert result is not None
+    assert result.args == expected
 
 
 SIMPLE_ARGS = [
@@ -165,8 +181,9 @@ def test_shlex_platform_specific(sys_platform: str, value: str, expected: list[s
     if sys_platform != "win32" and value.startswith("SPECIAL:"):
         # on non-windows platform, backslash is always an escape, not path separator
         expected = [exp.replace("\\", "") for exp in expected]
-    result = StrConvert().to_command(value).args
-    assert result == expected
+    result = StrConvert().to_command(value)
+    assert result is not None
+    assert result.args == expected
 
 
 @pytest.mark.parametrize(

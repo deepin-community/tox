@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import sys
 from typing import TYPE_CHECKING, Sequence
 
 from tox.config.main import Config
@@ -18,6 +19,11 @@ class State:
 
     def __init__(self, options: Options, args: Sequence[str]) -> None:
         self.conf = Config.make(options.parsed, options.pos_args, options.source)
+        self.conf.core.add_constant(
+            keys=["on_platform"],
+            desc="platform we are running on",
+            value=sys.platform,
+        )
         self._options = options
         self.args = args
         self._journal: Journal = Journal(getattr(options.parsed, "result_json", None) is not None)
@@ -33,7 +39,7 @@ class State:
 
 @impl
 def tox_add_option(parser: ToxParser) -> None:
-    from tox.tox_env.register import REGISTER
+    from tox.tox_env.register import REGISTER  # noqa: PLC0415
 
     parser.add_argument(
         "--runner",

@@ -29,12 +29,10 @@ Build-Depends:
  python3-sphinx-inline-tabs <!nodoc>,
  furo <!nodoc>,
  towncrier <!nodoc>,
-Standards-Version: 4.6.2
+Standards-Version: 4.7.2
 Vcs-Git: https://salsa.debian.org/python-team/packages/tox.git
 Vcs-Browser: https://salsa.debian.org/python-team/packages/tox
 Rules-Requires-Root: no
-# either this, or Build-Depends+Depends: python3-tomli
-X-Python3-Version: >= 3.11
 
 Package: tox
 Architecture: all

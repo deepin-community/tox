@@ -1,10 +1,9 @@
 """Common functionality shared across multiple type of runs."""
+
 from __future__ import annotations
 
 import logging
 import os
-import random
-import sys
 import time
 from argparse import Action, ArgumentError, ArgumentParser, Namespace
 from concurrent.futures import CancelledError, Future, ThreadPoolExecutor, as_completed
@@ -15,18 +14,17 @@ from typing import TYPE_CHECKING, Any, Iterator, Optional, Sequence, cast
 
 from colorama import Fore
 
-from tox.config.types import EnvList
 from tox.execute import Outcome
 from tox.journal import write_journal
 from tox.session.cmd.run.single import ToxEnvRunResult, run_one
-from tox.tox_env.runner import RunToxEnv
-from tox.util.ci import is_ci
 from tox.util.graph import stable_topological_sort
 from tox.util.spinner import MISS_DURATION, Spinner
 
 if TYPE_CHECKING:
+    from tox.config.types import EnvList
     from tox.session.state import State
     from tox.tox_env.api import ToxEnv
+    from tox.tox_env.runner import RunToxEnv
 
 
 class SkipMissingInterpreterAction(Action):
@@ -38,7 +36,7 @@ class SkipMissingInterpreterAction(Action):
         option_string: str | None = None,  # noqa: ARG002
     ) -> None:
         value = "true" if values is None else values
-        if value not in ("config", "true", "false"):
+        if value not in {"config", "true", "false"}:
             raise ArgumentError(self, f"value must be 'config', 'true', or 'false' (got {value!r})")
         setattr(namespace, self.dest, value)
 
@@ -53,7 +51,7 @@ class InstallPackageAction(Action):
     ) -> None:
         if not values:
             raise ArgumentError(self, "cannot be empty")
-        path = Path(cast(str, values)).absolute()
+        path = Path(cast("str", values)).absolute()
         if not path.exists():
             raise ArgumentError(self, f"{path} does not exist")
         if not path.is_file():
@@ -61,18 +59,9 @@ class InstallPackageAction(Action):
         setattr(namespace, self.dest, path)
 
 
-def env_run_create_flags(parser: ArgumentParser, mode: str) -> None:  # noqa: C901
+def env_run_create_flags(parser: ArgumentParser, mode: str) -> None:
     # mode can be one of: run, run-parallel, legacy, devenv, config
-    if mode not in ("config", "depends"):
-        parser.add_argument(
-            "--result-json",
-            dest="result_json",
-            metavar="path",
-            of_type=Path,
-            default=None,
-            help="write a JSON file with detailed information about all commands and results involved",
-        )
-    if mode not in ("devenv", "depends"):
+    if mode not in {"devenv", "depends"}:
         parser.add_argument(
             "-s",
             "--skip-missing-interpreters",
@@ -82,7 +71,7 @@ def env_run_create_flags(parser: ArgumentParser, mode: str) -> None:  # noqa: C9
             action=SkipMissingInterpreterAction,
             help="don't fail tests for missing interpreters: {config,true,false} choice",
         )
-    if mode not in ("devenv", "config", "depends"):
+    if mode not in {"devenv", "config", "depends"}:
         parser.add_argument(
             "-n",
             "--notest",
@@ -106,79 +95,21 @@ def env_run_create_flags(parser: ArgumentParser, mode: str) -> None:  # noqa: C9
             action=InstallPackageAction,
             dest="install_pkg",
         )
-    if mode not in ("devenv", "depends"):
+    if mode not in {"devenv", "depends"}:
         parser.add_argument(
             "--develop",
             action="store_true",
             help="install package in development mode",
             dest="develop",
         )
-    if mode not in ("depends",):
-
-        class SeedAction(Action):
-            def __call__(
-                self,
-                parser: ArgumentParser,  # noqa: ARG002
-                namespace: Namespace,
-                values: str | Sequence[Any] | None,
-                option_string: str | None = None,  # noqa: ARG002
-            ) -> None:
-                if values == "notset":
-                    result = None
-                else:
-                    try:
-                        result = int(cast(str, values))
-                        if result <= 0:
-                            msg = "must be greater than zero"
-                            raise ValueError(msg)  # noqa: TRY301
-                    except ValueError as exc:
-                        raise ArgumentError(self, str(exc)) from exc
-                setattr(namespace, self.dest, result)
-
-        if os.environ.get("PYTHONHASHSEED", "random") != "random":
-            hashseed_default = int(os.environ["PYTHONHASHSEED"])
-        else:
-            hashseed_default = random.randint(1, 1024 if sys.platform == "win32" else 4294967295)  # noqa: S311
-
-        parser.add_argument(
-            "--hashseed",
-            metavar="SEED",
-            help="set PYTHONHASHSEED to SEED before running commands. Defaults to a random integer in the range "
-            "[1, 4294967295] ([1, 1024] on Windows). Passing 'notset' suppresses this behavior.",
-            action=SeedAction,
-            of_type=Optional[int],
-            default=hashseed_default,
-            dest="hash_seed",
-        )
-    parser.add_argument(
-        "--discover",
-        dest="discover",
-        nargs="+",
-        metavar="path",
-        help="for Python discovery first try the Python executables under these paths",
-        default=[],
-    )
-    if mode not in ("depends",):
+    if mode != "depends":
         parser.add_argument(
             "--no-recreate-pkg",
             dest="no_recreate_pkg",
             help="if recreate is set do not recreate packaging tox environment(s)",
             action="store_true",
         )
-        list_deps = parser.add_mutually_exclusive_group()
-        list_deps.add_argument(
-            "--list-dependencies",
-            action="store_true",
-            default=is_ci(),
-            help="list the dependencies installed during environment setup",
-        )
-        list_deps.add_argument(
-            "--no-list-dependencies",
-            action="store_false",
-            dest="list_dependencies",
-            help="never list the dependencies installed during environment setup",
-        )
-    if mode not in ("devenv", "config", "depends"):
+    if mode not in {"devenv", "config", "depends"}:
         parser.add_argument(
             "--skip-pkg-install",
             dest="skip_pkg_install",
@@ -236,7 +167,7 @@ def execute(state: State, max_workers: int | None, has_spinner: bool, live: bool
     state.envs.ensure_only_run_env_is_active()
     to_run_list: list[str] = list(state.envs.iter())
     for name in to_run_list:
-        cast(RunToxEnv, state.envs[name]).mark_active()
+        cast("RunToxEnv", state.envs[name]).mark_active()
     previous, has_previous = None, False
     try:
         spinner = ToxSpinner(has_spinner, state, len(to_run_list))
@@ -255,9 +186,9 @@ def execute(state: State, max_workers: int | None, has_spinner: bool, live: bool
             interrupt.set()
             # cancel in reverse order to not allow submitting new jobs as we cancel running ones
             for future, tox_env in reversed(list(future_to_env.items())):
-                cancelled = future.cancel()
-                # if cannot be cancelled and not done -> still runs
-                if cancelled is False and not future.done():  # pragma: no branch
+                canceled = future.cancel()
+                # if cannot be canceled and not done -> still runs
+                if canceled is False and not future.done():  # pragma: no branch
                     tox_env.interrupt()
             done.wait()
             # workaround for https://bugs.python.org/issue45274
@@ -298,7 +229,7 @@ class ToxSpinner(Spinner):
         done(result.name)
 
 
-def _queue_and_wait(  # noqa: C901, PLR0913, PLR0915
+def _queue_and_wait(  # noqa: C901, PLR0913, PLR0915, PLR0912
     state: State,
     to_run_list: list[str],
     results: list[ToxEnvRunResult],
@@ -309,7 +240,7 @@ def _queue_and_wait(  # noqa: C901, PLR0913, PLR0915
     spinner: ToxSpinner,
     live: bool,  # noqa: FBT001
 ) -> None:
-    try:
+    try:  # noqa: PLR1702
         options = state._options  # noqa: SLF001
         with spinner:
             max_workers = len(to_run_list) if max_workers is None else max_workers
@@ -329,7 +260,7 @@ def _queue_and_wait(  # noqa: C901, PLR0913, PLR0915
                 env_list: list[str] = []
                 while True:
                     for env in env_list:  # queue all available
-                        tox_env_to_run = cast(RunToxEnv, state.envs[env])
+                        tox_env_to_run = cast("RunToxEnv", state.envs[env])
                         if interrupt.is_set():  # queue the rest as failed upfront
                             tox_env_to_run.teardown()
                             future: Future[ToxEnvRunResult] = Future()
@@ -391,7 +322,7 @@ def _handle_one_run_done(
 ) -> None:
     success = result.code == Outcome.OK
     spinner.update_spinner(result, success)
-    tox_env = cast(RunToxEnv, state.envs[result.name])
+    tox_env = cast("RunToxEnv", state.envs[result.name])
     if tox_env.journal:  # add overall journal entry
         tox_env.journal["result"] = {
             "success": success,
@@ -431,8 +362,8 @@ def run_order(state: State, to_run: list[str]) -> tuple[list[str], dict[str, set
     to_run_set = set(to_run)
     todo: dict[str, set[str]] = {}
     for env in to_run:
-        run_env = cast(RunToxEnv, state.envs[env])
-        depends = set(cast(EnvList, run_env.conf["depends"]).envs)
+        run_env = cast("RunToxEnv", state.envs[env])
+        depends = set(cast("EnvList", run_env.conf["depends"]).envs)
         todo[env] = to_run_set & depends
     order = stable_topological_sort(todo)
     return order, todo

@@ -5,19 +5,19 @@ from typing import TYPE_CHECKING, Callable
 
 import pytest
 
-from tox.config.loader.ini.replace import MAX_REPLACE_DEPTH
+from tox.config.loader.replacer import MAX_REPLACE_DEPTH
 from tox.config.sets import ConfigSet
 from tox.report import HandledError
 
 if TYPE_CHECKING:
-    from tests.config.loader.ini.replace.conftest import ReplaceOne
+    from tests.config.loader.conftest import ReplaceOne
     from tests.conftest import ToxIniCreator
     from tox.pytest import LogCaptureFixture
 
 EnvConfigCreator = Callable[[str], ConfigSet]
 
 
-@pytest.fixture()
+@pytest.fixture
 def example(tox_ini_conf: ToxIniCreator) -> EnvConfigCreator:
     def func(conf: str) -> ConfigSet:
         config = tox_ini_conf(f"""[tox]\nenv_list = a\n[testenv]\n{conf}\n""")
@@ -60,7 +60,7 @@ def test_replace_within_section_chain_deep(caplog: LogCaptureFixture, tox_ini_co
                 "a0 = 1",
                 *(f"a{ix} = {{[vars]a{ix - 1}}}" for ix in range(1, depth + 1)),
                 "[testenv:a]",
-                "b = {[vars]a%s}" % depth,
+                f"b = {{[vars]a{depth}}}",
             ],
         ),
     )
@@ -189,7 +189,7 @@ def test_replace_from_tox_section_missing_value(tox_ini_conf: ToxIniCreator) -> 
 def test_replace_from_section_bad_type(tox_ini_conf: ToxIniCreator) -> None:
     conf_a = tox_ini_conf("[testenv:e]\nx = {[m]a}\n[m]\na=w\n").get_env("e")
     conf_a.add_config(keys="x", of_type=int, default=1, desc="d")
-    with pytest.raises(ValueError, match="invalid literal.*w.*"):
+    with pytest.raises(ValueError, match=r"invalid literal.*w.*"):
         assert conf_a["x"]
 
 

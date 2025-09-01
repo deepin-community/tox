@@ -14,6 +14,8 @@ if TYPE_CHECKING:
 
 
 class MemoryLoader(Loader[Any]):
+    """Loads configuration directly from data in memory."""
+
     def __init__(self, **kwargs: Any) -> None:
         super().__init__(Section(prefix="<memory>", name=str(id(self))), [])
         self.raw: dict[str, Any] = {**kwargs}
@@ -49,7 +51,7 @@ class MemoryLoader(Loader[Any]):
         return Path(value)
 
     @staticmethod
-    def to_command(value: Any) -> Command:
+    def to_command(value: Any) -> Command | None:
         if isinstance(value, Command):
             return value
         if isinstance(value, str):
