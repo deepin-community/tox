@@ -6,12 +6,15 @@ from signal import SIGINT
 from subprocess import PIPE, Popen
 from time import sleep
 from typing import TYPE_CHECKING
+from unittest import mock
 
 import pytest
 
+from tox.session.cmd.run import parallel
 from tox.session.cmd.run.parallel import parse_num_processes
 from tox.tox_env.api import ToxEnv
 from tox.tox_env.errors import Fail
+from tox.util.cpu import auto_detect_cpus
 
 if TYPE_CHECKING:
     from pathlib import Path
@@ -78,7 +81,7 @@ def test_parallel_general(tox_project: ToxProjectCreator, monkeypatch: MonkeyPat
     oks, skips, fails = {"a", "b", "c"}, {"d"}, {"e", "f"}
     missing = set()
     for env in "a", "b", "c", "d", "e", "f":
-        if env in ("c", "e"):
+        if env in {"c", "e"}:
             assert "run c" in out, out
         elif env == "f":
             assert "f: failed with something bad happened" in out, out
@@ -169,3 +172,58 @@ def test_parallel_requires_arg(tox_project: ToxProjectCreator) -> None:
     outcome = tox_project({"tox.ini": ""}).run("p", "-p", "-h")
     outcome.assert_failed()
     assert "argument -p/--parallel: expected one argument" in outcome.err
+
+
+def test_parallel_no_spinner(tox_project: ToxProjectCreator) -> None:
+    """Ensure passing `--parallel-no-spinner` implies `--parallel`."""
+    with mock.patch.object(parallel, "execute") as mocked:
+        tox_project({"tox.ini": ""}).run("p", "--parallel-no-spinner")
+
+    mocked.assert_called_once_with(
+        mock.ANY,
+        max_workers=auto_detect_cpus(),
+        has_spinner=False,
+        live=False,
+    )
+
+
+def test_parallel_no_spinner_with_parallel(tox_project: ToxProjectCreator) -> None:
+    """Ensure `--parallel N` is still respected with `--parallel-no-spinner`."""
+    with mock.patch.object(parallel, "execute") as mocked:
+        tox_project({"tox.ini": ""}).run("p", "--parallel-no-spinner", "--parallel", "2")
+
+    mocked.assert_called_once_with(
+        mock.ANY,
+        max_workers=2,
+        has_spinner=False,
+        live=False,
+    )
+
+
+def test_parallel_no_spinner_ci(
+    tox_project: ToxProjectCreator, mocker: MockerFixture, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Ensure spinner is disabled by default in CI."""
+    mocked = mocker.patch.object(parallel, "execute")
+    monkeypatch.setenv("CI", "1")
+
+    tox_project({"tox.ini": ""}).run("p")
+
+    mocked.assert_called_once_with(
+        mock.ANY,
+        max_workers=auto_detect_cpus(),
+        has_spinner=False,
+        live=False,
+    )
+
+
+def test_parallel_no_spinner_legacy(tox_project: ToxProjectCreator) -> None:
+    with mock.patch.object(parallel, "execute") as mocked:
+        tox_project({"tox.ini": ""}).run("--parallel-no-spinner")
+
+    mocked.assert_called_once_with(
+        mock.ANY,
+        max_workers=auto_detect_cpus(),
+        has_spinner=False,
+        live=False,
+    )

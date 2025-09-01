@@ -187,11 +187,21 @@ a given command add a ``-`` prefix to that line (similar syntax to how the GNU `
 
 .. code-block:: ini
 
-
    [testenv]
    commands =
      - python -c 'import sys; sys.exit(1)'
      python --version
+
+You can also choose to provide a ``!`` prefix instead to purposely invert the exit code, making the line fail if the
+command returned exit code 0. Any other exit code is considered a success.
+
+.. code-block:: ini
+
+   [testenv]
+   commands =
+     ! python -c 'import sys; sys.exit(1)'
+     python --version
+
 
 Customizing virtual environment creation
 ----------------------------------------
@@ -298,7 +308,7 @@ codes with any value, so their documentation should be consulted.
 
 Sometimes, no exit code is given at all. An example may be found in
 :gh:`pytest-qt issue #170 <pytest-dev/pytest-qt/issues/170>`, where Qt was calling
-`abort() <https://www.unix.org/version2/sample/abort.html>`_ instead of ``exit()``.
+`abort() <https://unix.org/version2/sample/abort.html>`_ instead of ``exit()``.
 
 Access full logs
 ----------------
@@ -349,6 +359,8 @@ Just make sure you switch the user to ``root`` when needed and switch back to ``
     USER tox
 
 
+.. _eol-version-support:
+
 Testing end-of-life Python versions
 -----------------------------------
 
@@ -366,3 +378,51 @@ If you need to test against e.g. Python 2.7, 3.5 or 3.6, you need to add the fol
 
 In case you need to do this for many repositories, we recommend to use
 `all-repos <https://github.com/asottile/all-repos>`_.
+
+Support for Python 3.7 was dropped in `virtualenv 20.27.0 <https://virtualenv.pypa.io/en/latest/changelog.html#v20-27-0-2024-10-17>`_.
+In order to test against Python 3.7, you can limit the version with ``requires = virtualenv<20.27.0`` instead.
+
+
+Testing with Pytest
+-------------------
+
+Running ``pytest`` from ``tox`` can be configured like this:
+
+.. code-block:: ini
+
+    [tox]
+    envlist = py311, py312
+
+    [testenv]
+    commands = pytest
+
+If required, ``tox`` positional arguments can be passed through to ``pytest``:
+
+.. code-block:: ini
+
+    [testenv]
+    commands = pytest {posargs}
+
+When running ``tox`` in parallel mode (:ref:`tox-run-parallel-(p)`), care should be taken to ensure concurrent
+``pytest`` invocations are fully isolated.
+
+This can be achieved by setting ``pytest``'s base temporary directory to a unique temporary directory for each virtual
+environment as provided by ``tox``:
+
+.. code-block:: ini
+
+    [testenv]
+    commands = pytest --basetemp="{env_tmp_dir}"
+
+Setting the ``pytest`` ``--basetemp`` argument also causes all temporary ``pytest`` files to be deleted immediately
+after the tests are completed. To restore the default ``pytest`` behavior to retain temporary files for the most recent
+``pytest`` invocations, the system's temporary directory location could be configured like this instead:
+
+.. code-block:: ini
+
+    [tox]
+    set_env =
+      TEMP = {env_tmp_dir}
+
+    [testenv]
+    commands = pytest

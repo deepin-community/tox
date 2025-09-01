@@ -1,4 +1,5 @@
 """Execute that runs on local file system via subprocess-es."""
+
 from __future__ import annotations
 
 import fnmatch
@@ -45,7 +46,7 @@ IS_WIN = sys.platform == "win32"
 
 
 class LocalSubProcessExecutor(Execute):
-    def build_instance(
+    def build_instance(  # noqa: PLR6301
         self,
         request: ExecuteRequest,
         options: ExecuteOptions,
@@ -108,7 +109,7 @@ class LocalSubprocessExecuteStatus(ExecuteStatus):
         try:
             if sys.platform == "win32":  # explicit check for mypy  # pragma: win32 cover
                 # on Windows we have a PipeHandle object here rather than a file stream
-                import _overlapped  # type: ignore[import]
+                import _overlapped  # type: ignore[import]  # noqa: PLC0415,PLC2701
 
                 ov = _overlapped.Overlapped(0)
                 ov.WriteFile(stdin.handle, bytes_content)  # type: ignore[attr-defined]
@@ -147,12 +148,12 @@ class LocalSubprocessExecuteFailedStatus(ExecuteStatus):
     def write_stdin(self, content: str) -> None:
         """Cannot write."""
 
-    def interrupt(self) -> None:
+    def interrupt(self) -> None:  # noqa: PLR6301
         return None  # pragma: no cover # nothing running so nothing to interrupt
 
 
 class LocalSubProcessExecuteInstance(ExecuteInstance):
-    def __init__(  # noqa: PLR0913
+    def __init__(
         self,
         request: ExecuteRequest,
         options: ExecuteOptions,
@@ -205,7 +206,7 @@ class LocalSubProcessExecuteInstance(ExecuteInstance):
         stdout, stderr = self.get_stream_file_no("stdout"), self.get_stream_file_no("stderr")
         try:
             self.process = process = Popen(
-                self.cmd,  # noqa: S603
+                self.cmd,
                 stdout=next(stdout),
                 stderr=next(stderr),
                 stdin={StdinSource.USER: None, StdinSource.OFF: DEVNULL, StdinSource.API: PIPE}[self.request.stdin],
@@ -213,6 +214,9 @@ class LocalSubProcessExecuteInstance(ExecuteInstance):
                 env=self.request.env,
             )
         except OSError as exception:
+            # We log a nice error message to avout returning opaque error codes,
+            # like exit code 2 (filenotfound).
+            logging.error("Exception running subprocess %s", str(exception))  # noqa: TRY400
             return LocalSubprocessExecuteFailedStatus(self.options, self._out, self._err, exception.errno)
 
         status = LocalSubprocessExecuteStatus(self.options, self._out, self._err, process)
@@ -293,10 +297,10 @@ def _pty(key: str) -> tuple[int, int] | None:
         return None
 
     try:
-        import fcntl
-        import pty
-        import struct
-        import termios
+        import fcntl  # noqa: PLC0415
+        import pty  # noqa: PLC0415
+        import struct  # noqa: PLC0415
+        import termios  # noqa: PLC0415
     except ImportError:  # pragma: no cover
         return None  # cannot proceed on platforms without pty support
 
@@ -314,7 +318,7 @@ def _pty(key: str) -> tuple[int, int] | None:
     # adjust sub-process terminal size
     columns, lines = shutil.get_terminal_size(fallback=(-1, -1))
     if columns != -1 and lines != -1:
-        size = struct.pack("HHHH", columns, lines, 0, 0)
+        size = struct.pack("HHHH", lines, columns, 0, 0)
         fcntl.ioctl(child, termios.TIOCSWINSZ, size)
 
     return main, child
@@ -322,9 +326,8 @@ def _pty(key: str) -> tuple[int, int] | None:
 
 __all__ = (
     "SIG_INTERRUPT",
-    "CREATION_FLAGS",
     "LocalSubProcessExecuteInstance",
     "LocalSubProcessExecutor",
-    "LocalSubprocessExecuteStatus",
     "LocalSubprocessExecuteFailedStatus",
+    "LocalSubprocessExecuteStatus",
 )

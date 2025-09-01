@@ -6,10 +6,6 @@ include /usr/share/dpkg/pkg-info.mk
 #export PYBUILD_VERBOSE=1
 export PYBUILD_NAME=tox
 
-# this sets the version using hatch-vcs -> setuptools_scm statically, instead
-# through the git tag, and in turn writing it to version.py.
-export SETUPTOOLS_SCM_PRETEND_VERSION = $(DEB_VERSION_UPSTREAM)
-
 %:
 	dh $@ --buildsystem=pybuild
 
@@ -23,8 +19,8 @@ execute_after_dh_auto_build: export http_proxy=127.0.0.1:9
 execute_after_dh_auto_build: export https_proxy=127.0.0.1:9
 execute_after_dh_auto_build:
 	# build HTML docs and manpages with Sphinx
-	TOX_HASH_SEED=0 PYTHONPATH=src:$$PYTHONPATH \
+	TOX_HASH_SEED=0 TOX_USER_CONFIG_FILE=/dev/null PYTHONPATH=src:$$PYTHONPATH \
 	  python3 -m sphinx -N -bhtml docs/ build/html
-	TOX_HASH_SEED=0 PYTHONPATH=src:$$PYTHONPATH \
+	TOX_HASH_SEED=0 TOX_USER_CONFIG_FILE=/dev/null PYTHONPATH=src:$$PYTHONPATH \
 	  python3 -m sphinx -N -bman docs/ build/man
 endif

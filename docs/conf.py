@@ -72,9 +72,11 @@ linkcheck_ignore = [
     re.escape(i)
     for i in (
         r"https://github.com/tox-dev/tox/issues/new?title=Trouble+with+development+environment",
-        r"https://www.unix.org/version2/sample/abort.html",
+        r"https://porkbun.com/",  # has captcha on it that makes it return with 405
+        r"https://opensource.org/license/mit",
     )
 ]
+linkcheck_allowed_redirects = {r"https://github.com/tox-dev/tox/issues/\d+": r"https://github.com/tox-dev/tox/pull/\d+"}
 extlinks_detect_hardcoded_links = True
 
 
@@ -86,7 +88,7 @@ def process_signature(  # noqa: PLR0913
     options: Options,
     args: str,  # noqa: ARG001
     retann: str | None,  # noqa: ARG001
-) -> None | tuple[None, None]:
+) -> tuple[None, None] | None:
     # skip-member is not checked for class level docs, so disable via signature processing
     return (None, None) if objtype == "class" and "__init__" in options.get("exclude-members", set()) else None
 
@@ -97,7 +99,7 @@ def setup(app: Sphinx) -> None:
     root, exe = here.parent, Path(sys.executable)
     towncrier = exe.with_name(f"towncrier{exe.suffix}")
     cmd = [str(towncrier), "build", "--draft", "--version", "NEXT"]
-    new = check_output(cmd, cwd=root, text=True, stderr=subprocess.DEVNULL)  # noqa: S603
+    new = check_output(cmd, cwd=root, text=True, stderr=subprocess.DEVNULL)
     (root / "docs" / "_draft.rst").write_text("" if "No significant changes" in new else new)
 
     class PatchedPythonDomain(PythonDomain):
@@ -113,12 +115,11 @@ def setup(app: Sphinx) -> None:
         ) -> Element:
             # fixup some wrongly resolved mappings
             mapping = {
-                "_io.TextIOWrapper": "io.TextIOWrapper",
                 "tox.config.of_type.T": "typing.TypeVar",  # used by Sphinx bases
                 "tox.config.loader.api.T": "typing.TypeVar",  # used by Sphinx bases
                 "tox.config.loader.convert.T": "typing.TypeVar",  # used by Sphinx bases
                 "tox.tox_env.installer.T": "typing.TypeVar",  # used by Sphinx bases
-                "concurrent.futures._base.Future": "concurrent.futures.Future",
+                "pathlib._local.Path": "pathlib.Path",
             }
             if target in mapping:
                 target = node["reftarget"] = mapping[target]
@@ -129,7 +130,7 @@ def setup(app: Sphinx) -> None:
     tox_cfg = SourceFileLoader("tox_conf", str(here / "tox_conf.py")).load_module().ToxConfig
     app.add_directive(tox_cfg.name, tox_cfg)
 
-    def check_uri(self: ExternalLinksChecker, refnode: reference) -> None:  #
+    def check_uri(self: ExternalLinksChecker, refnode: reference) -> None:
         if refnode.document.attributes["source"].endswith("index.rst"):
             return None  # do not use for the index file
         return prev_check(self, refnode)

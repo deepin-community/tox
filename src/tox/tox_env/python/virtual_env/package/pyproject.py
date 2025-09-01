@@ -3,6 +3,7 @@ from __future__ import annotations
 import logging
 import os
 import sys
+from abc import ABC
 from collections import defaultdict
 from contextlib import contextmanager
 from itertools import chain
@@ -94,8 +95,8 @@ class ToxCmdStatus(CmdStatus):
         return status.outcome.out_err()
 
 
-class Pep517VirtualEnvPackager(PythonPackageToxEnv, VirtualEnv):
-    """local file system python virtual environment via the virtualenv package."""
+class Pep517VenvPackager(PythonPackageToxEnv, ABC):
+    """local file system python virtual environment package builder."""
 
     def __init__(self, create_args: ToxEnvCreateArgs) -> None:
         super().__init__(create_args)
@@ -106,11 +107,22 @@ class Pep517VirtualEnvPackager(PythonPackageToxEnv, VirtualEnv):
         self._package_dependencies: list[Requirement] | None = None
         self._package_name: str | None = None
         self._pkg_lock = RLock()  # can build only one package at a time
-        self.root = self.conf["package_root"]
         self._package_paths: set[Path] = set()
+        self._root: Path | None = None
+
+    @property
+    def root(self) -> Path:
+        if self._root is None:
+            self._root = self.conf["package_root"]
+        return self._root
+
+    @root.setter
+    def root(self, value: Path) -> None:
+        self._root = value
+        self._frontend_ = None  # force recreating the frontend with new root
 
     @staticmethod
-    def id() -> str:  # noqa: A003
+    def id() -> str:
         return "virtualenv-pep-517"
 
     @property
@@ -135,6 +147,12 @@ class Pep517VirtualEnvPackager(PythonPackageToxEnv, VirtualEnv):
         )
         for key in ("sdist", "wheel", "editable"):
             self._add_config_settings(key)
+        self.conf.add_config(
+            keys=["fresh_subprocess"],
+            of_type=bool,
+            default=self._frontend.backend.split(".")[0] == "setuptools",
+            desc="create a fresh subprocess for every backend request",
+        )
 
     def _add_config_settings(self, build_type: str) -> None:
         # config settings passed to PEP-517-compliant build backend https://peps.python.org/pep-0517/#config-settings
@@ -153,7 +171,7 @@ class Pep517VirtualEnvPackager(PythonPackageToxEnv, VirtualEnv):
 
     @property
     def pkg_dir(self) -> Path:
-        return cast(Path, self.conf["pkg_dir"])
+        return cast("Path", self.conf["pkg_dir"])
 
     @property
     def meta_folder(self) -> Path:
@@ -220,7 +238,7 @@ class Pep517VirtualEnvPackager(PythonPackageToxEnv, VirtualEnv):
                 "package config for %s is editable, however the build backend %s does not support PEP-660, falling "
                 "back to editable-legacy - change your configuration to it",
                 names,
-                cast(Pep517VirtualEnvFrontend, self._frontend_).backend,
+                cast("Pep517VirtualEnvFrontend", self._frontend_).backend,
             )
             for env in targets:
                 env._defined["package"].value = "editable-legacy"  # type: ignore[attr-defined]  # noqa: SLF001
@@ -267,7 +285,7 @@ class Pep517VirtualEnvPackager(PythonPackageToxEnv, VirtualEnv):
 
     @property
     def _package_temp_path(self) -> Path:
-        return cast(Path, self.core["temp_dir"]) / "package"
+        return cast("Path", self.core["temp_dir"]) / "package"
 
     def _load_deps(self, for_env: EnvConfigSet) -> list[Requirement]:
         # first check if this is statically available via PEP-621
@@ -308,7 +326,7 @@ class Pep517VirtualEnvPackager(PythonPackageToxEnv, VirtualEnv):
         of_type: str = for_env["package"]
         reqs: list[Requirement] | None = None
         name = ""
-        if of_type in ("wheel", "editable"):  # wheel packages
+        if of_type in {"wheel", "editable"}:  # wheel packages
             w_env = self._wheel_build_envs.get(for_env["wheel_build_env"])
             if w_env is not None and w_env is not self:
                 with w_env.display_context(self._has_display_suspended):
@@ -326,7 +344,7 @@ class Pep517VirtualEnvPackager(PythonPackageToxEnv, VirtualEnv):
         with self._pkg_lock:
             if self._package_dependencies is None:  # pragma: no branch
                 self._ensure_meta_present(for_env)
-                requires: list[str] = cast(PathDistribution, self._distribution_meta).requires or []
+                requires: list[str] = cast("PathDistribution", self._distribution_meta).requires or []
                 self._package_dependencies = [Requirement(i) for i in requires]  # pragma: no branch
         return self._package_dependencies
 
@@ -334,7 +352,7 @@ class Pep517VirtualEnvPackager(PythonPackageToxEnv, VirtualEnv):
         with self._pkg_lock:
             if self._package_name is None:  # pragma: no branch
                 self._ensure_meta_present(for_env)
-                self._package_name = cast(PathDistribution, self._distribution_meta).metadata["Name"]
+                self._package_name = cast("PathDistribution", self._distribution_meta).metadata["Name"]
         return self._package_name
 
     def _ensure_meta_present(self, for_env: EnvConfigSet) -> None:
@@ -360,8 +378,16 @@ class Pep517VirtualEnvPackager(PythonPackageToxEnv, VirtualEnv):
         return self._frontend.requires
 
 
+class Pep517VirtualEnvPackager(Pep517VenvPackager, VirtualEnv):
+    """local file system python virtual environment via the virtualenv package."""
+
+    @staticmethod
+    def id() -> str:
+        return "virtualenv-pep-517"
+
+
 class Pep517VirtualEnvFrontend(Frontend):
-    def __init__(self, root: Path, env: Pep517VirtualEnvPackager) -> None:
+    def __init__(self, root: Path, env: Pep517VenvPackager) -> None:
         super().__init__(*Frontend.create_args_from_folder(root))
         self._tox_env = env
         self._backend_executor_: LocalSubProcessPep517Executor | None = None
@@ -392,7 +418,7 @@ class Pep517VirtualEnvFrontend(Frontend):
 
     def _can_skip_prepare(self, cmd: str) -> bool:
         # given we'll build a wheel we might skip the prepare step
-        return cmd in ("prepare_metadata_for_build_wheel", "prepare_metadata_for_build_editable") and (
+        return cmd in {"prepare_metadata_for_build_wheel", "prepare_metadata_for_build_editable"} and (
             "wheel" in self._tox_env.builds or "editable" in self._tox_env.builds
         )
 
@@ -403,21 +429,25 @@ class Pep517VirtualEnvFrontend(Frontend):
         result_file: Path,  # noqa: ARG002
         msg: str,
     ) -> Iterator[ToxCmdStatus]:
-        with self._tox_env.execute_async(
-            cmd=self.backend_cmd,
-            cwd=self._root,
-            stdin=StdinSource.API,
-            show=None,
-            run_id=cmd,
-            executor=self.backend_executor,
-        ) as execute_status:
-            execute_status.write_stdin(f"{msg}{os.linesep}")
-            yield ToxCmdStatus(execute_status)
-        outcome = execute_status.outcome
-        if outcome is not None:  # pragma: no branch
-            outcome.assert_success()
+        try:
+            with self._tox_env.execute_async(
+                cmd=self.backend_cmd,
+                cwd=self._root,
+                stdin=StdinSource.API,
+                show=None,
+                run_id=cmd,
+                executor=self.backend_executor,
+            ) as execute_status:
+                execute_status.write_stdin(f"{msg}{os.linesep}")
+                yield ToxCmdStatus(execute_status)
+            outcome = execute_status.outcome
+            if outcome is not None:  # pragma: no branch
+                outcome.assert_success()
+        finally:
+            if self._tox_env.conf["fresh_subprocess"]:
+                self.backend_executor.close()
 
-    def _unexpected_response(  # noqa: PLR0913
+    def _unexpected_response(
         self,
         cmd: str,
         got: Any,
@@ -454,3 +484,9 @@ class Pep517VirtualEnvFrontend(Frontend):
 @impl
 def tox_register_tox_env(register: ToxEnvRegister) -> None:
     register.add_package_env(Pep517VirtualEnvPackager)
+
+
+__all__ = [
+    "Pep517VenvPackager",
+    "Pep517VirtualEnvPackager",
+]

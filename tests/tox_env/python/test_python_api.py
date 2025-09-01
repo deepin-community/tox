@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import sys
+from types import SimpleNamespace
 from typing import TYPE_CHECKING, Callable
 from unittest.mock import patch
 
@@ -37,8 +38,8 @@ def test_requirements_txt(tox_project: ToxProjectCreator) -> None:
 
 def test_conflicting_base_python_factor() -> None:
     major, minor = sys.version_info[0:2]
-    name = f"py{major}{minor}-py{major}{minor-1}"
-    with pytest.raises(ValueError, match=f"conflicting factors py{major}{minor}, py{major}{minor-1} in {name}"):
+    name = f"py{major}{minor}-py{major}{minor - 1}"
+    with pytest.raises(ValueError, match=f"conflicting factors py{major}{minor}, py{major}{minor - 1} in {name}"):
         Python.extract_base_python(name)
 
 
@@ -84,6 +85,8 @@ def test_diff_msg_no_diff() -> None:
         ("py3.12", "py3.12"),
         ("pypy2", "pypy2"),
         ("rustpython3", "rustpython3"),
+        ("graalpy", "graalpy"),
+        ("jython", "jython"),
         ("cpython3.8", "cpython3.8"),
         ("ironpython2.7", "ironpython2.7"),
         ("functional-py310", "py310"),
@@ -98,6 +101,10 @@ def test_diff_msg_no_diff() -> None:
         ("5", None),
         ("2000", None),
         ("4000", None),
+        ("3.10", "3.10"),
+        ("3.9", "3.9"),
+        ("2.7", "2.7"),
+        ("pypy-3.10", "pypy3.10"),
     ],
     ids=lambda a: "|".join(a) if isinstance(a, list) else str(a),
 )
@@ -160,7 +167,7 @@ def test_base_python_env_conflict_show_conf(tox_project: ToxProjectCreator, igno
     if ignore_conflict is not None:
         ini += f"\n[tox]\nignore_base_python_conflict={ignore_conflict}"
     project = tox_project({"tox.ini": ini})
-    result = project.run("c", "-e", f"py{py_ver}", "-k", "base_python")
+    result = project.run("c", "-e", f"py{py_ver}", "-k", "base_python", raise_on_config_fail=False)
     result.assert_success()
     if ignore_conflict:
         out = f"[testenv:py{py_ver}]\nbase_python = py{py_ver}\n"
@@ -255,7 +262,7 @@ def test_python_hash_seed_from_env_and_disable(tox_project: ToxProjectCreator) -
 
 @pytest.mark.parametrize("in_ci", [True, False])
 def test_list_installed_deps(in_ci: bool, tox_project: ToxProjectCreator, mocker: MockerFixture) -> None:
-    mocker.patch("tox.session.cmd.run.common.is_ci", return_value=in_ci)
+    mocker.patch("tox.config.cli.parser.is_ci", return_value=in_ci)
     result = tox_project({"tox.ini": "[testenv]\nskip_install = true"}).run("r", "-e", "py")
     if in_ci:
         assert "pip==" in result.out
@@ -271,7 +278,7 @@ def test_list_installed_deps_explicit_cli(
     tox_project: ToxProjectCreator,
     mocker: MockerFixture,
 ) -> None:
-    mocker.patch("tox.session.cmd.run.common.is_ci", return_value=in_ci)
+    mocker.patch("tox.config.cli.parser.is_ci", return_value=in_ci)
     result = tox_project({"tox.ini": "[testenv]\nskip_install = true"}).run(list_deps, "r", "-e", "py")
     if list_deps == "--list-dependencies":
         assert "pip==" in result.out
@@ -284,3 +291,29 @@ def test_usedevelop_with_nonexistent_basepython(tox_project: ToxProjectCreator) 
     project = tox_project({"tox.ini": ini})
     result = project.run()
     assert result.code == 0
+
+
+@pytest.mark.parametrize(
+    ("impl", "major", "minor", "arch"),
+    [
+        ("cpython", 3, 12, 64),
+        ("pypy", 3, 9, 32),
+    ],
+)
+def test_python_spec_for_sys_executable(impl: str, major: int, minor: int, arch: int, mocker: MockerFixture) -> None:
+    version_info = SimpleNamespace(major=major, minor=minor, micro=5, releaselevel="final", serial=0)
+    implementation = SimpleNamespace(
+        name=impl,
+        cache_tag=f"{impl}-{major}{minor}",
+        version=version_info,
+        hexversion=...,
+        _multiarch=...,
+    )
+    mocker.patch.object(sys, "version_info", version_info)
+    mocker.patch.object(sys, "implementation", implementation)
+    mocker.patch.object(sys, "maxsize", 2**arch // 2 - 1)
+    spec = Python._python_spec_for_sys_executable()  # noqa: SLF001
+    assert spec.implementation == impl
+    assert spec.major == major
+    assert spec.minor == minor
+    assert spec.architecture == arch

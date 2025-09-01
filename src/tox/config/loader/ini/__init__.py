@@ -6,7 +6,8 @@ from typing import TYPE_CHECKING, TypeVar
 
 from tox.config.loader.api import ConfigLoadArgs, Loader, Override
 from tox.config.loader.ini.factor import filter_for_env
-from tox.config.loader.ini.replace import replace
+from tox.config.loader.ini.replace import ReplaceReferenceIni
+from tox.config.loader.replacer import replace
 from tox.config.loader.str_convert import StrConvert
 from tox.config.set_env import SetEnv
 from tox.report import HandledError
@@ -25,7 +26,7 @@ _COMMENTS = re.compile(r"(\s)*(?<!\\)#.*")
 class IniLoader(StrConvert, Loader[str]):
     """Load configuration from an ini section (ini file is a string to string dictionary)."""
 
-    def __init__(  # noqa: PLR0913
+    def __init__(
         self,
         section: Section,
         parser: ConfigParser,
@@ -71,9 +72,10 @@ class IniLoader(StrConvert, Loader[str]):
             if conf is None:
                 replaced = raw_  # no replacement supported in the core section
             else:
+                reference_replacer = ReplaceReferenceIni(conf, self)
                 try:
-                    replaced = replace(conf, self, raw_, args_)  # do replacements
-                except Exception as exception:  # noqa: BLE001
+                    replaced = replace(conf, reference_replacer, raw_, args_)  # do replacements
+                except Exception as exception:
                     if isinstance(exception, HandledError):
                         raise
                     name = self.core_section.key if args_.env_name is None else args_.env_name

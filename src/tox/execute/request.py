@@ -1,4 +1,5 @@
 """Module declaring a command execution request."""
+
 from __future__ import annotations
 
 import sys
@@ -58,9 +59,9 @@ class ExecuteRequest:
             exe = str(Path(self.cmd[0]).relative_to(self.cwd))
         except ValueError:
             exe = self.cmd[0]
-        _cmd = [exe]
-        _cmd.extend(self.cmd[1:])
-        return shell_cmd(_cmd)
+        cmd = [exe]
+        cmd.extend(self.cmd[1:])
+        return shell_cmd(cmd)
 
     def __repr__(self) -> str:
         return f"{self.__class__.__name__}(cmd={self.cmd!r}, cwd={self.cwd!r}, env=..., stdin={self.stdin!r})"
@@ -68,17 +69,17 @@ class ExecuteRequest:
 
 def shell_cmd(cmd: Sequence[str]) -> str:
     if sys.platform == "win32":  # pragma: win32 cover
-        from subprocess import list2cmdline
+        from subprocess import list2cmdline  # noqa: PLC0415
 
         return list2cmdline(tuple(str(x) for x in cmd))
     # pragma: win32 no cover
-    from shlex import quote as shlex_quote
+    from shlex import quote as shlex_quote  # noqa: PLC0415
 
     return " ".join(shlex_quote(str(x)) for x in cmd)
 
 
 __all__ = (
-    "StdinSource",
     "ExecuteRequest",
+    "StdinSource",
     "shell_cmd",
 )

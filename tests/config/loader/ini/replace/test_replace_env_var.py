@@ -6,7 +6,7 @@ from typing import TYPE_CHECKING, Generator
 import pytest
 
 if TYPE_CHECKING:
-    from tests.config.loader.ini.replace.conftest import ReplaceOne
+    from tests.config.loader.conftest import ReplaceOne
     from tox.pytest import LogCaptureFixture, MonkeyPatch
 
 
@@ -97,7 +97,7 @@ def test_replace_env_var_circular(replace_one: ReplaceOne, monkeypatch: MonkeyPa
     assert result == "{env:MAGIC}"
 
 
-@pytest.fixture()
+@pytest.fixture
 def reset_env_var_after_delay(monkeypatch: MonkeyPatch) -> Generator[threading.Thread, None, None]:
     timeout = 2
 

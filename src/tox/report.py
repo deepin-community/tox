@@ -1,13 +1,16 @@
 """Handle reporting from within tox."""
+
 from __future__ import annotations
 
+import locale
 import logging
 import os
 import sys
 from contextlib import contextmanager
 from io import BytesIO, TextIOWrapper
 from pathlib import Path
-from threading import Thread, current_thread, enumerate, local
+from threading import Thread, current_thread, local
+from threading import enumerate as enumerate_threads
 from typing import IO, ClassVar, Iterator, Tuple
 
 from colorama import Fore, Style, init
@@ -56,7 +59,7 @@ class _LogThreadLocal(local):
     def name(self, value: str) -> None:
         self._name = value
 
-        for ident in self._ident_to_data.keys() - {t.ident for t in enumerate()}:
+        for ident in self._ident_to_data.keys() - {t.ident for t in enumerate_threads()}:
             self._ident_to_data.pop(ident)
         self._ident_to_data[current_thread().ident] = value
 
@@ -86,7 +89,7 @@ class _LogThreadLocal(local):
 
     @staticmethod
     def _make(prefix: str, based_of: TextIOWrapper) -> TextIOWrapper:
-        return TextIOWrapper(NamedBytesIO(f"{prefix}-{based_of.name}"))
+        return TextIOWrapper(NamedBytesIO(f"{prefix}-{based_of.name}"), encoding=locale.getpreferredencoding(False))  # noqa: FBT003
 
 
 class NamedBytesIO(BytesIO):
@@ -137,7 +140,7 @@ class ToxHandler(logging.StreamHandler):  # type: ignore[type-arg] # is generic 
         """:return: the current standard error"""
         return self._local.out_err[1]
 
-    @property  # type: ignore[override]
+    @property
     def stream(self) -> IO[str]:
         """:return: the current stream to write to (alias for the current standard output)"""
         return self.stdout
@@ -179,7 +182,7 @@ class ToxHandler(logging.StreamHandler):  # type: ignore[type-arg] # is generic 
         fmt = f"{_c(Style.BRIGHT)}{_c(Fore.MAGENTA)}%(env_name)s:{_c(Style.RESET_ALL)}" + fmt
         return logging.Formatter(fmt)
 
-    def format(self, record: logging.LogRecord) -> str:  # noqa: A003
+    def format(self, record: logging.LogRecord) -> str:
         # shorten the pathname to start from within the site-packages folder
         record.env_name = "root" if self._local.name is None else self._local.name
         basename = str(Path(record.pathname).parent)

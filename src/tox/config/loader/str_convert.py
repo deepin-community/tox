@@ -1,13 +1,16 @@
 """Convert string configuration values to tox python configuration objects."""
+
 from __future__ import annotations
 
 import shlex
 import sys
+from inspect import isclass
 from itertools import chain
 from pathlib import Path
 from typing import TYPE_CHECKING, Any, Iterator
 
 from tox.config.loader.convert import Convert
+from tox.config.loader.ini.factor import expand_ranges
 from tox.config.types import Command, EnvList
 
 if TYPE_CHECKING:
@@ -27,7 +30,7 @@ class StrConvert(Convert[str]):
 
     @staticmethod
     def to_list(value: str, of_type: type[Any]) -> Iterator[str]:
-        splitter = "\n" if issubclass(of_type, Command) or "\n" in value else ","
+        splitter = "\n" if (isclass(of_type) and issubclass(of_type, Command)) or "\n" in value else ","
         splitter = splitter.replace("\r", "")
         for token in value.split(splitter):
             value = token.strip()
@@ -65,12 +68,12 @@ class StrConvert(Convert[str]):
                 if last_char == escape:
                     continue
                 next_char = value[ix + 1 : ix + 2]
-                if next_char not in (escape, *special_chars):
+                if next_char not in {escape, *special_chars}:
                     result.append(escape)  # escape escapes that are not themselves escaping a special character
         return "".join(result)
 
     @staticmethod
-    def to_command(value: str) -> Command:
+    def to_command(value: str) -> Command | None:
         """
         At this point, ``value`` has already been substituted out, and all punctuation / escapes are final.
 
@@ -96,7 +99,7 @@ class StrConvert(Convert[str]):
                     # on Windows quoted arguments will remain quoted, strip it
                     arg = arg[1:-1]  # noqa: PLW2901
                 args.append(arg)
-                pos = splitter.instream.tell()
+                pos = splitter.instream.tell()  # type: ignore[attr-defined]
         except ValueError:
             args.append(value[pos:])
         if len(args) == 0:
@@ -109,8 +112,9 @@ class StrConvert(Convert[str]):
 
     @staticmethod
     def to_env_list(value: str) -> EnvList:
-        from tox.config.loader.ini.factor import extend_factors
+        from tox.config.loader.ini.factor import extend_factors  # noqa: PLC0415
 
+        value = expand_ranges(value)
         elements = list(chain.from_iterable(extend_factors(expr) for expr in value.split("\n")))
         return EnvList(elements)
 

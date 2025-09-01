@@ -1,7 +1,9 @@
 """This package handles provisioning an appropriate tox version per requirements."""
+
 from __future__ import annotations
 
 import json
+import locale
 import logging
 import sys
 from importlib.metadata import PackageNotFoundError, distribution
@@ -18,12 +20,12 @@ from tox.plugin import impl
 from tox.report import HandledError
 from tox.tox_env.errors import Skip
 from tox.tox_env.python.pip.req_file import PythonDeps
-from tox.tox_env.python.runner import PythonRun
 
 if TYPE_CHECKING:
     from argparse import ArgumentParser
 
     from tox.session.state import State
+    from tox.tox_env.python.runner import PythonRun
 
 
 @impl
@@ -80,7 +82,7 @@ def provision(state: State) -> int | bool:
         post_process=add_tox_requires_min_version,
     )
 
-    from tox.plugin.manager import MANAGER
+    from tox.plugin.manager import MANAGER  # noqa: PLC0415
 
     MANAGER.tox_add_core_config(state.conf.core, state)
 
@@ -92,7 +94,7 @@ def provision(state: State) -> int | bool:
         base=[],  # disable inheritance for provision environments
         package="skip",  # no packaging for this please
         # use our own dependency specification
-        deps=PythonDeps("\n".join(str(r) for r in requires), root=state.conf.core["tox_root"]),
+        deps=PythonDeps(requires, root=state.conf.core["tox_root"]),
         pass_env=["*"],  # do not filter environment variables, will be handled by provisioned tox
         recreate=state.conf.options.recreate and not state.conf.options.no_recreate_provision,
     )
@@ -115,7 +117,9 @@ def provision(state: State) -> int | bool:
                 "minversion": min_version[1] if len(min_version) >= 2 else None,  # noqa: PLR2004
                 "requires": [str(i) for i in requires],
             }
-            Path(no_provision).write_text(json.dumps(requires_dict, indent=4))
+            Path(no_provision).write_text(
+                json.dumps(requires_dict, indent=4), encoding=locale.getpreferredencoding(do_setlocale=False)
+            )
         raise HandledError(msg)
 
     logging.warning("will run in automatically provisioned tox, host %s %s", sys.executable, miss_msg)
@@ -137,7 +141,7 @@ def _get_missing(requires: list[Requirement]) -> list[tuple[Requirement, str | N
 
 
 def run_provision(name: str, state: State) -> int:
-    tox_env: PythonRun = cast(PythonRun, state.envs[name])
+    tox_env: PythonRun = cast("PythonRun", state.envs[name])
     env_python = tox_env.env_python()
     logging.info("will run in a automatically provisioned python environment under %s", env_python)
     try:
@@ -148,4 +152,4 @@ def run_provision(name: str, state: State) -> int:
     args: list[str] = [str(env_python), "-m", "tox"]
     args.extend(state.args)
     outcome = tox_env.execute(cmd=args, stdin=StdinSource.user_only(), show=True, run_id="provision", cwd=Path.cwd())
-    return cast(int, outcome.exit_code)
+    return cast("int", outcome.exit_code)

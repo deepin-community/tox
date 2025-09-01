@@ -60,9 +60,15 @@ def _make_tox_wheel(
 ) -> Path:
     with elapsed("acquire current tox wheel"):  # takes around 3.2s on build
         into = tmp_path_factory.mktemp("dist")  # pragma: no cover
-        from tox.version import version_tuple
+        from tox.version import version_tuple  # noqa: PLC0415
 
-        version = f"{version_tuple[0]}.{version_tuple[1]}.{version_tuple[2] +1}"
+        patch_version = version_tuple[2]
+        if isinstance(patch_version, str) and patch_version[:3] == "dev":
+            # Version is in the form of 1.23.dev456, we need to increment the 456 part
+            version = f"{version_tuple[0]}.{version_tuple[1]}.dev{int(patch_version[3:]) + 1}"
+        else:
+            version = f"{version_tuple[0]}.{version_tuple[1]}.{int(patch_version) + 1}"
+
         with mock.patch.dict(os.environ, {"SETUPTOOLS_SCM_PRETEND_VERSION": version}):
             return pkg_builder(into, Path(__file__).parents[1], ["wheel"], False)  # pragma: no cover
 
@@ -101,7 +107,7 @@ def pypi_index_self(pypi_server: IndexServer, tox_wheels: list[Path], demo_pkg_i
     return self_index
 
 
-@pytest.fixture()
+@pytest.fixture
 def _pypi_index_self(pypi_index_self: Index, monkeypatch: MonkeyPatch) -> None:
     pypi_index_self.use()
     monkeypatch.setenv("PIP_INDEX_URL", pypi_index_self.url)
@@ -121,7 +127,7 @@ def test_provision_requires_nok(tox_project: ToxProjectCreator) -> None:
     )
 
 
-@pytest.mark.integration()
+@pytest.mark.integration
 @pytest.mark.usefixtures("_pypi_index_self")
 def test_provision_requires_ok(tox_project: ToxProjectCreator, tmp_path: Path) -> None:
     proj = tox_project({"tox.ini": "[tox]\nrequires=demo-pkg-inline\n[testenv]\npackage=skip"})
@@ -154,7 +160,7 @@ def test_provision_requires_ok(tox_project: ToxProjectCreator, tmp_path: Path) -
     assert f"ROOT: remove tox env folder {provision_env}" in result_recreate.out, result_recreate.out
 
 
-@pytest.mark.integration()
+@pytest.mark.integration
 @pytest.mark.usefixtures("_pypi_index_self")
 def test_provision_platform_check(tox_project: ToxProjectCreator) -> None:
     ini = "[tox]\nrequires=demo-pkg-inline\n[testenv]\npackage=skip\n[testenv:.tox]\nplatform=wrong_platform"
@@ -188,7 +194,7 @@ def test_provision_no_recreate_json(tox_project: ToxProjectCreator) -> None:
     assert requires == {"minversion": None, "requires": ["p", "tox"]}
 
 
-@pytest.mark.integration()
+@pytest.mark.integration
 @pytest.mark.usefixtures("_pypi_index_self")
 @pytest.mark.parametrize("plugin_testenv", ["testenv", "testenv:a"])
 def test_provision_plugin_runner(tox_project: ToxProjectCreator, tmp_path: Path, plugin_testenv: str) -> None:
@@ -211,7 +217,7 @@ def test_provision_plugin_runner(tox_project: ToxProjectCreator, tmp_path: Path,
     assert prov_msg in result_label.out
 
 
-@pytest.mark.integration()
+@pytest.mark.integration
 def test_provision_plugin_runner_in_provision(tox_project: ToxProjectCreator, tmp_path: Path) -> None:
     """Ensure that provision environment can be explicitly configured."""
     log = tmp_path / "out.log"
@@ -220,7 +226,7 @@ def test_provision_plugin_runner_in_provision(tox_project: ToxProjectCreator, tm
         proj.run("r", "-e", "py", "--result-json", str(log))
 
 
-@pytest.mark.integration()
+@pytest.mark.integration
 @pytest.mark.usefixtures("_pypi_index_self")
 @pytest.mark.parametrize("relative_path", [True, False], ids=["relative", "absolute"])
 def test_provision_conf_file(tox_project: ToxProjectCreator, tmp_path: Path, relative_path: bool) -> None:
@@ -229,3 +235,19 @@ def test_provision_conf_file(tox_project: ToxProjectCreator, tmp_path: Path, rel
     conf_path = str(Path(project.path.name) / "tox.ini") if relative_path else str(project.path / "tox.ini")
     result = project.run("c", "--conf", conf_path, "-e", "py", from_cwd=tmp_path)
     result.assert_success()
+
+
+@pytest.mark.parametrize("subcommand", ["r", "p", "de", "l", "d", "c", "q", "e", "le"])
+def test_provision_default_arguments_exists(tox_project: ToxProjectCreator, subcommand: str) -> None:
+    ini = r"""
+    [tox]
+    requires =
+        tox<4.14
+    [testenv]
+    package = skip
+    """
+    project = tox_project({"tox.ini": ini})
+    project.patch_execute(lambda r: 0 if "install" in r.run_id else None)
+    outcome = project.run(subcommand)
+    for argument in ["result_json", "hash_seed", "discover", "list_dependencies"]:
+        assert hasattr(outcome.state.conf.options, argument)

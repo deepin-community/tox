@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from functools import reduce
 from pathlib import Path
 from typing import Callable, Iterator, Mapping
 
@@ -10,7 +11,9 @@ Replacer = Callable[[str, ConfigLoadArgs], str]
 
 
 class SetEnv:
-    def __init__(self, raw: str, name: str, env_name: str | None, root: Path) -> None:
+    def __init__(  # noqa: C901, PLR0912
+        self, raw: str | dict[str, str] | list[dict[str, str]], name: str, env_name: str | None, root: Path
+    ) -> None:
         self.changed = False
         self._materialized: dict[str, str] = {}  # env vars we already loaded
         self._raw: dict[str, str] = {}  # could still need replacement
@@ -18,11 +21,20 @@ class SetEnv:
         self._env_files: list[str] = []
         self._replacer: Replacer = lambda s, c: s  # noqa: ARG005
         self._name, self._env_name, self._root = name, env_name, root
-        from .loader.ini.replace import MatchExpression, find_replace_expr
+        from .loader.replacer import MatchExpression, find_replace_expr  # noqa: PLC0415
 
-        for line in raw.splitlines():
+        if isinstance(raw, dict):
+            self._raw = raw
+            if "file" in raw:  # environment files to be handled later
+                self._env_files.append(raw["file"])
+                self._raw.pop("file")
+            return
+        if isinstance(raw, list):
+            self._raw = reduce(lambda a, b: {**a, **b}, raw)
+            return
+        for line in raw.splitlines():  # noqa: PLR1702
             if line.strip():
-                if line.startswith("file|"):
+                if line.startswith("file|"):  # environment files to be handled later
                     self._env_files.append(line[len("file|") :])
                 else:
                     try:
@@ -82,7 +94,7 @@ class SetEnv:
         return result
 
     def __contains__(self, item: object) -> bool:
-        return isinstance(item, str) and item in self.__iter__()
+        return isinstance(item, str) and item in iter(self)
 
     def __iter__(self) -> Iterator[str]:
         # start with the materialized ones, maybe we don't need to materialize the raw ones
@@ -93,6 +105,7 @@ class SetEnv:
             expanded_line = self._replacer(line, ConfigLoadArgs([], self._name, self._env_name))
             sub_raw = dict(self._extract_key_value(sub_line) for sub_line in expanded_line.splitlines() if sub_line)
             self._raw.update(sub_raw)
+            self.changed = True  # loading while iterating can cause these values to be missed
             yield from sub_raw.keys()
 
     def update(self, param: Mapping[str, str] | SetEnv, *, override: bool = True) -> None:

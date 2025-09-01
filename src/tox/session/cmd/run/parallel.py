@@ -1,4 +1,5 @@
 """Run tox environments in parallel."""
+
 from __future__ import annotations
 
 import logging
@@ -7,6 +8,7 @@ from typing import TYPE_CHECKING
 
 from tox.plugin import impl
 from tox.session.env_select import CliEnv, register_env_select_flags
+from tox.util.ci import is_ci
 from tox.util.cpu import auto_detect_cpus
 
 from .common import env_run_create_flags, execute
@@ -27,7 +29,7 @@ def tox_add_option(parser: ToxParser) -> None:
     our = parser.add_command("run-parallel", ["p"], "run environments in parallel", run_parallel)
     register_env_select_flags(our, default=CliEnv())
     env_run_create_flags(our, mode="run-parallel")
-    parallel_flags(our, default_parallel=DEFAULT_PARALLEL)
+    parallel_flags(our, default_parallel=DEFAULT_PARALLEL, default_spinner=is_ci())
 
 
 def parse_num_processes(str_value: str) -> int | None:
@@ -50,6 +52,8 @@ def parallel_flags(
     our: ArgumentParser,
     default_parallel: int | str,
     no_args: bool = False,  # noqa: FBT001, FBT002
+    *,
+    default_spinner: bool = False,
 ) -> None:
     our.add_argument(
         "-p",
@@ -58,7 +62,7 @@ def parallel_flags(
         help="run tox environments in parallel, the argument controls limit: all,"
         " auto - cpu count, some positive number, zero is turn off",
         action="store",
-        type=parse_num_processes,  # type: ignore[arg-type]  # nargs confuses it
+        type=parse_num_processes,
         default=default_parallel,
         metavar="VAL",
         **({"nargs": "?"} if no_args else {}),  # type: ignore[arg-type] # type checker can't unroll it
@@ -74,7 +78,11 @@ def parallel_flags(
         "--parallel-no-spinner",
         action="store_true",
         dest="parallel_no_spinner",
-        help="do not show the spinner",
+        default=default_spinner,
+        help=(
+            "run tox environments in parallel, but don't show the spinner, implies --parallel. "
+            "Disabled by default if CI is detected (not in legacy API)."
+        ),
     )
 
 
@@ -83,7 +91,7 @@ def run_parallel(state: State) -> int:
     option = state.conf.options
     return execute(
         state,
-        max_workers=option.parallel,
+        max_workers=auto_detect_cpus() if option.parallel == 0 else option.parallel,
         has_spinner=option.parallel_no_spinner is False and option.parallel_live is False,
         live=option.parallel_live,
     )

@@ -26,10 +26,27 @@ if TYPE_CHECKING:
 LOGGER = logging.getLogger(__name__)
 
 
-class CliEnv:
-    """CLI tox env selection."""
+class CliEnv:  # noqa: PLW1641
+    """A `CliEnv` is the user's selection of tox test environments, usually supplied via the ``-e`` command-line option
+    or in a TOML file (typically ``env_list`` in ``tox.ini``). It may be treated as a sequence if it's not a "default"
+    or "all" selection.
 
-    def __init__(self, value: None | list[str] | str = None) -> None:
+    It is in one of three forms:
+
+    - A list of specific environments, instantiated with a string that is a comma-separated list of the environment
+      names. (These may have spaces on either side of the commas which are removed.) As a sequence this will be a
+      sequence of those names.
+
+    - "ALL" which is all environments defined by the tox configuration. This is instantiated with ``ALL`` either
+      alone or as any element of a comma-separated list; any other environment names are ignored. `is_all()` will be
+      true and as a sequence it will be empty. This prints in string representation as ``ALL``.
+
+    - The default environments as chosen by tox configuration. This is instantiated with `None` as the parameter,
+      `is_default_list()` will be true, and as a sequence this will be empty. This prints in string representation
+      as ``<env_list>``.
+    """
+
+    def __init__(self, value: list[str] | str | None = None) -> None:
         if isinstance(value, str):
             value = StrConvert().to(value, of_type=List[str], factory=None)
         self._names: list[str] | None = value
@@ -39,6 +56,7 @@ class CliEnv:
             yield from self._names
 
     def __bool__(self) -> bool:
+        """A `CliEnv` is `True` if it's not the default set of environments."""
         return bool(self._names)
 
     def __str__(self) -> str:
@@ -48,7 +66,7 @@ class CliEnv:
         return f"{self.__class__.__name__}({'' if self.is_default_list else repr(str(self))})"
 
     def __eq__(self, other: object) -> bool:
-        return type(self) == type(other) and self._names == other._names  # type: ignore[attr-defined]
+        return type(self) == type(other) and self._names == other._names  # type: ignore[attr-defined]  # noqa: E721
 
     def __ne__(self, other: object) -> bool:
         return not (self == other)
@@ -130,14 +148,14 @@ class EnvSelector:
         self.on_empty_fallback_py = True
         self._warned_about: set[str] = set()  #: shared set of skipped environments that were already warned about
         self._state = state
-        self._defined_envs_: None | dict[str, _ToxEnvInfo] = None
+        self._defined_envs_: dict[str, _ToxEnvInfo] | None = None
         self._pkg_env_counter: Counter[str] = Counter()
-        from tox.plugin.manager import MANAGER
+        from tox.plugin.manager import MANAGER  # noqa: PLC0415
 
         self._manager = MANAGER
         self._log_handler = self._state._options.log_handler  # noqa: SLF001
         self._journal = self._state._journal  # noqa: SLF001
-        self._provision: None | tuple[bool, str] = None
+        self._provision: tuple[bool, str] | None = None
 
         self._state.conf.core.add_config("labels", Dict[str, EnvList], {}, "core labels")
         tox_env_filter_regex = getattr(state.conf.options, "skip_env", "").strip()
@@ -171,7 +189,7 @@ class EnvSelector:
         for env in self._cli_envs or []:
             if env.startswith(".pkg_external"):  # external package
                 continue
-            factors: dict[str, str | None] = {k: None for k in env.split("-")}
+            factors: dict[str, str | None] = dict.fromkeys(env.split("-"))
             found_factors: set[str] = set()
             for factor in factors:
                 if (
@@ -187,7 +205,7 @@ class EnvSelector:
                 invalid_envs[env] = (
                     None
                     if any(i is None for i in factors.values())
-                    else "-".join(cast(Iterable[str], factors.values()))
+                    else "-".join(cast("Iterable[str]", factors.values()))
                 )
         if invalid_envs:
             msg = "provided environments not found in configuration file:\n"
@@ -221,15 +239,15 @@ class EnvSelector:
     def _defined_envs(self) -> dict[str, _ToxEnvInfo]:  # noqa: C901, PLR0912
         # The problem of classifying run/package environments:
         # There can be two type of tox environments: run or package. Given a tox environment name there's no easy way to
-        # find out which it is.  Intuitively a run environment is any environment that's not used for packaging by
-        # another run environment. To find out what are the packaging environments for a run environment you have to
-        # first construct it. This implies a two phase solution: construct all environments and query their packaging
-        # environments. The run environments are the ones not marked as of packaging type. This requires being able
-        # to change tox environments type, if it was earlier discovered as a run environment and is marked as packaging
-        # we need to redefine it, e.g. when it shows up in config as [testenv:.package] and afterwards by a run env is
+        # find out which it is.  Intuitively, a run environment is any environment not used for packaging by another run
+        # environment. To find out what are the packaging environments for a run environment, you have to first
+        # construct it. This implies a two-phase solution: construct all environments and query their packaging
+        # environments. The run environments are the ones not marked as of packaging type. This requires being able to
+        # change tox environments types, if it was earlier discovered as a run environment and is marked as packaging,
+        # we need to redefine it. E.g., when it shows up in config as [testenv:.package] and afterward by a run env is
         # marked as package_env.
 
-        if self._defined_envs_ is None:
+        if self._defined_envs_ is None:  # noqa: PLR1702
             self._defined_envs_ = {}
             failed: dict[str, Exception] = {}
             env_name_to_active = self._env_name_to_active()
@@ -249,7 +267,7 @@ class EnvSelector:
                     try:
                         run_env.package_env = self._build_pkg_env(pkg_name_type, name, env_name_to_active)
                     except Exception as exception:  # noqa: BLE001
-                        # if it's not a run environment,  wait to see if ends up being a packaging one -> rollback
+                        # if it's not a run environment, wait to see if ends up being a packaging one -> rollback
                         failed[name] = exception
                         for key in self._pkg_env_counter - start_package_env_use_counter:
                             del self._defined_envs_[key]
@@ -298,10 +316,11 @@ class EnvSelector:
         env_conf = self._state.conf.get_env(name, package=False)
         desc = "the tox execute used to evaluate this environment"
         env_conf.add_config(keys="runner", desc=desc, of_type=str, default=self._state.conf.options.default_runner)
-        runner = REGISTER.runner(cast(str, env_conf["runner"]))
+        runner = REGISTER.runner(cast("str", env_conf["runner"]))
         journal = self._journal.get_env_journal(name)
         args = ToxEnvCreateArgs(env_conf, self._state.conf.core, self._state.conf.options, journal, self._log_handler)
         run_env = runner(args)
+        run_env.register_config()
         self._manager.tox_add_env_config(env_conf, self._state)
         return run_env
 
@@ -345,6 +364,7 @@ class EnvSelector:
         journal = self._journal.get_env_journal(name)
         args = ToxEnvCreateArgs(pkg_conf, self._state.conf.core, self._state.conf.options, journal, self._log_handler)
         pkg_env: PackageToxEnv = package_type(args)
+        pkg_env.register_config()
         self._defined_envs_[name] = _ToxEnvInfo(pkg_env, is_active)
         self._manager.tox_add_env_config(pkg_conf, self._state)
         return pkg_env
@@ -386,7 +406,7 @@ class EnvSelector:
         """
         return self._defined_envs[item].env
 
-    def iter(  # noqa: A003
+    def iter(
         self,
         *,
         only_active: bool = True,
@@ -424,7 +444,7 @@ class EnvSelector:
 
 
 __all__ = [
-    "register_env_select_flags",
-    "EnvSelector",
     "CliEnv",
+    "EnvSelector",
+    "register_env_select_flags",
 ]

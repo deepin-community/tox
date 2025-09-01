@@ -1,4 +1,5 @@
 """Abstract base API for executing commands within tox environments."""
+
 from __future__ import annotations
 
 import logging
@@ -51,15 +52,15 @@ class ExecuteOptions:
 
     @property
     def suicide_timeout(self) -> float:
-        return cast(float, self._env.conf["suicide_timeout"])
+        return cast("float", self._env.conf["suicide_timeout"])
 
     @property
     def interrupt_timeout(self) -> float:
-        return cast(float, self._env.conf["interrupt_timeout"])
+        return cast("float", self._env.conf["interrupt_timeout"])
 
     @property
     def terminate_timeout(self) -> float:
-        return cast(float, self._env.conf["terminate_timeout"])
+        return cast("float", self._env.conf["terminate_timeout"])
 
 
 class ExecuteStatus(ABC):
@@ -121,11 +122,19 @@ class Execute(ABC):
         env: ToxEnv,
     ) -> Iterator[ExecuteStatus]:
         start = time.monotonic()
+        stderr_color = None
+        if self._colored:
+            try:
+                cfg_color = env.conf._conf.options.stderr_color  # noqa: SLF001
+                stderr_color = getattr(Fore, cfg_color)
+            except (AttributeError, KeyError, TypeError):  # many tests have a mocked 'env'
+                stderr_color = Fore.RED
         try:
             # collector is what forwards the content from the file streams to the standard streams
             out, err = out_err[0].buffer, out_err[1].buffer
-            out_sync = SyncWrite(out.name, out if show else None)
-            err_sync = SyncWrite(err.name, err if show else None, Fore.RED if self._colored else None)
+            out_sync = SyncWrite(out.name, out if show else None)  # type: ignore[arg-type]
+            err_sync = SyncWrite(err.name, err if show else None, stderr_color)  # type: ignore[arg-type]
+
             with out_sync, err_sync:
                 instance = self.build_instance(request, self._option_class(env), out_sync, err_sync)
                 with instance as status:
@@ -251,6 +260,12 @@ class Outcome:
             self._assert_fail()
         self.log_run_done(logging.INFO)
 
+    def assert_failure(self) -> None:
+        """Assert that the execution failed."""
+        if self.exit_code is not None and self.exit_code == self.OK:
+            self._assert_fail()
+        self.log_run_done(logging.INFO)
+
     def _assert_fail(self) -> NoReturn:
         if self.show_on_standard is False:
             if self.out:
@@ -298,10 +313,10 @@ class Outcome:
 
 __all__ = (
     "ContentHandler",
-    "Outcome",
     "Execute",
     "ExecuteInstance",
     "ExecuteOptions",
     "ExecuteStatus",
+    "Outcome",
     "StdinSource",
 )

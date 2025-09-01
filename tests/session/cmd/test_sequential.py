@@ -56,7 +56,7 @@ def test_run_sequential_quiet(tox_project: ToxProjectCreator) -> None:
     assert Matches(r"  a: OK \([\d.]+ seconds\)") == reports[-2]
 
 
-@pytest.mark.integration()
+@pytest.mark.integration
 def test_result_json_sequential(
     tox_project: ToxProjectCreator,
     enable_pip_pypi_access: str | None,  # noqa: ARG001
@@ -93,13 +93,12 @@ def test_result_json_sequential(
     packaging_setup = get_cmd_exit_run_id(log_report, ".pkg", "setup")
     assert "result" not in log_report["testenvs"][".pkg"]
 
+    assert packaging_setup[-1][0] in {0, None}
     assert packaging_setup == [
         (0, "install_requires"),
         (None, "_optional_hooks"),
         (None, "get_requires_for_build_wheel"),
-        (0, "install_requires_for_build_wheel"),
         (0, "freeze"),
-        (None, "_exit"),
     ]
     packaging_test = get_cmd_exit_run_id(log_report, ".pkg", "test")
     assert packaging_test == [(None, "build_wheel")]
@@ -118,7 +117,7 @@ def test_result_json_sequential(
     expected_pkg = {"pip", "setuptools", "wheel", "a"}
     assert {i[: i.find("==")] if "@" not in i else "a" for i in packaging_installed} == expected_pkg
     install_package = log_report["testenvs"]["py"].pop("installpkg")
-    assert re.match("^[a-fA-F0-9]{64}$", install_package.pop("sha256"))
+    assert re.match(r"^[a-fA-F0-9]{64}$", install_package.pop("sha256"))
     assert install_package == {"basename": "a-1.0-py3-none-any.whl", "type": "file"}
 
     expected = {
@@ -157,7 +156,7 @@ def test_rerun_sequential_wheel(tox_project: ToxProjectCreator, demo_pkg_inline:
     result_rerun.assert_success()
 
 
-@pytest.mark.integration()
+@pytest.mark.integration
 def test_rerun_sequential_sdist(tox_project: ToxProjectCreator, demo_pkg_inline: Path) -> None:
     proj = tox_project(
         {"tox.ini": "[testenv]\npackage=sdist\ncommands=python -c 'from demo_pkg_inline import do; do()'"},
@@ -299,10 +298,8 @@ def test_skip_develop_mode(tox_project: ToxProjectCreator, demo_pkg_setuptools: 
         (".pkg", "install_requires"),
         (".pkg", "_optional_hooks"),
         (".pkg", "get_requires_for_build_editable"),
-        (".pkg", "install_requires_for_build_editable"),
         (".pkg", "build_editable"),
         ("py", "install_package"),
-        (".pkg", "_exit"),
     ]
     assert calls == expected
 

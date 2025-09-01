@@ -1,8 +1,10 @@
 from __future__ import annotations
 
 import json
+import locale
 import logging
 import os
+import re
 import shutil
 import stat
 import subprocess
@@ -19,6 +21,7 @@ from psutil import AccessDenied
 
 from tox.execute.api import ExecuteOptions, Outcome
 from tox.execute.local_sub_process import SIG_INTERRUPT, LocalSubProcessExecuteInstance, LocalSubProcessExecutor
+from tox.execute.local_sub_process.read_via_thread_unix import ReadViaThreadUnix
 from tox.execute.request import ExecuteRequest, StdinSource
 from tox.execute.stream import SyncWrite
 from tox.report import NamedBytesIO
@@ -31,17 +34,25 @@ if TYPE_CHECKING:
 
 class FakeOutErr:
     def __init__(self) -> None:
-        self.out_err = TextIOWrapper(NamedBytesIO("out")), TextIOWrapper(NamedBytesIO("err"))
+        self.out_err = (
+            TextIOWrapper(NamedBytesIO("out"), encoding=locale.getpreferredencoding(False)),
+            TextIOWrapper(NamedBytesIO("err"), encoding=locale.getpreferredencoding(False)),
+        )
 
     def read_out_err(self) -> tuple[str, str]:
-        out_got = self.out_err[0].buffer.getvalue().decode(self.out_err[0].encoding)  # type: ignore[attr-defined]
-        err_got = self.out_err[1].buffer.getvalue().decode(self.out_err[1].encoding)  # type: ignore[attr-defined]
+        out_got = self.out_err[0].buffer.getvalue().decode(self.out_err[0].encoding)
+        err_got = self.out_err[1].buffer.getvalue().decode(self.out_err[1].encoding)
         return out_got, err_got
 
 
 @pytest.mark.parametrize("color", [True, False], ids=["color", "no_color"])
 @pytest.mark.parametrize(("out", "err"), [("out", "err"), ("", "")], ids=["simple", "nothing"])
 @pytest.mark.parametrize("show", [True, False], ids=["show", "no_show"])
+@pytest.mark.parametrize(
+    "stderr_color",
+    ["RED", "YELLOW", "RESET"],
+    ids=["stderr_color_default", "stderr_color_yellow", "stderr_color_reset"],
+)
 def test_local_execute_basic_pass(  # noqa: PLR0913
     caplog: LogCaptureFixture,
     os_env: dict[str, str],
@@ -49,13 +60,18 @@ def test_local_execute_basic_pass(  # noqa: PLR0913
     err: str,
     show: bool,
     color: bool,
+    stderr_color: str,
 ) -> None:
     caplog.set_level(logging.NOTSET)
     executor = LocalSubProcessExecutor(colored=color)
+
+    tox_env = MagicMock()
+    tox_env.conf._conf.options.stderr_color = stderr_color  # noqa: SLF001
     code = f"import sys; print({out!r}, end=''); print({err!r}, end='', file=sys.stderr)"
     request = ExecuteRequest(cmd=[sys.executable, "-c", code], cwd=Path(), env=os_env, stdin=StdinSource.OFF, run_id="")
     out_err = FakeOutErr()
-    with executor.call(request, show=show, out_err=out_err.out_err, env=MagicMock()) as status:
+
+    with executor.call(request, show=show, out_err=out_err.out_err, env=tox_env) as status:
         while status.exit_code is None:  # pragma: no branch
             status.wait()
     assert status.out == out.encode()
@@ -71,7 +87,7 @@ def test_local_execute_basic_pass(  # noqa: PLR0913
     out_got, err_got = out_err.read_out_err()
     if show:
         assert out_got == out
-        expected = (f"{Fore.RED}{err}{Fore.RESET}" if color else err) if err else ""
+        expected = f"{getattr(Fore, stderr_color)}{err}{Fore.RESET}" if color and err else err
         assert err_got == expected
     else:
         assert not out_got
@@ -140,6 +156,43 @@ def test_local_execute_write_a_lot(os_env: dict[str, str]) -> None:
     assert outcome.err == expected_err, expected_err[len(outcome.err) :]
 
 
+@pytest.mark.skipif(sys.platform == "win32", reason="Unix terminal size test")
+def test_local_execute_terminal_size(os_env: dict[str, str], monkeypatch: MonkeyPatch) -> None:
+    """Regression test for #2999 - check terminal size is set correctly in tox subprocess."""
+    import pty  # noqa: PLC0415
+
+    terminal_size = os.terminal_size((84, 42))
+    main, child = pty.openpty()  # type: ignore[attr-defined, unused-ignore]
+    # Use ReadViaThreadUnix to help with debugging the test itself.
+    pipe_out = ReadViaThreadUnix(main, sys.stdout.buffer.write, name="testout", drain=True)  # type: ignore[arg-type]
+    with pipe_out, monkeypatch.context() as monkey, open(  # noqa: PTH123
+        child, "w", encoding=locale.getpreferredencoding(False)
+    ) as stdout_mock:
+        # Switch stdout with test pty
+        monkey.setattr(sys, "stdout", stdout_mock)
+        monkey.setenv("COLUMNS", "84")
+        monkey.setenv("LINES", "42")
+
+        executor = LocalSubProcessExecutor(colored=False)
+        request = ExecuteRequest(
+            cmd=[sys.executable, "-c", "import os; print(os.get_terminal_size())"],
+            cwd=Path(),
+            env=os_env,
+            stdin=StdinSource.OFF,
+            run_id="",
+        )
+        out_err = FakeOutErr()
+        with executor.call(request, show=False, out_err=out_err.out_err, env=MagicMock()) as status:
+            while status.exit_code is None:  # pragma: no branch
+                status.wait()
+    outcome = status.outcome
+    assert outcome is not None
+    assert bool(outcome), outcome
+    expected_out = f"{terminal_size!r}\r\n"
+    assert outcome.out == expected_out, expected_out[len(outcome.out) :]
+    assert not outcome.err
+
+
 def test_local_execute_basic_fail(capsys: CaptureFixture, caplog: LogCaptureFixture, monkeypatch: MonkeyPatch) -> None:
     monkeypatch.chdir(Path(__file__).parents[3])
     caplog.set_level(logging.NOTSET)
@@ -191,14 +244,14 @@ def test_local_execute_basic_fail(capsys: CaptureFixture, caplog: LogCaptureFixt
     assert record.levelno == logging.CRITICAL
     assert record.msg == "exit %s (%.2f seconds) %s> %s%s"
     assert record.args is not None
-    _code, _duration, _cwd, _cmd, _metadata = record.args
-    assert _code == 3
-    assert _cwd == cwd
-    assert _cmd == request.shell_cmd
-    assert isinstance(_duration, float)
-    assert _duration > 0
-    assert isinstance(_metadata, str)
-    assert _metadata.startswith(" pid=")
+    code, duration, cwd_, cmd_, metadata = record.args
+    assert code == 3
+    assert cwd_ == cwd
+    assert cmd_ == request.shell_cmd
+    assert isinstance(duration, float)
+    assert duration > 0
+    assert isinstance(metadata, str)
+    assert metadata.startswith(" pid=")
 
 
 def test_command_does_not_exist(caplog: LogCaptureFixture, os_env: dict[str, str]) -> None:
@@ -222,7 +275,11 @@ def test_command_does_not_exist(caplog: LogCaptureFixture, os_env: dict[str, str
     assert outcome.exit_code != Outcome.OK
     assert not outcome.out
     assert not outcome.err
-    assert not caplog.records
+    assert len(caplog.records) == 1
+    assert caplog.records[0].levelname == "ERROR"
+    assert re.match(
+        r".*(No such file or directory|The system cannot find the file specified).*", caplog.records[0].message
+    )
 
 
 @pytest.mark.skipif(sys.platform == "win32", reason="You need a conhost shell for keyboard interrupt")
@@ -272,7 +329,7 @@ def test_local_subprocess_tty(monkeypatch: MonkeyPatch, mocker: MockerFixture, t
     mocker.patch("sys.stdout.isatty", return_value=tty)
     mocker.patch("sys.stderr.isatty", return_value=tty)
     try:
-        import termios  # noqa: F401
+        import termios  # noqa: F401, PLC0415
     except ImportError:
         exp_tty = False  # platforms without tty support at all
     else:

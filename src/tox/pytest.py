@@ -1,4 +1,5 @@
 """A pytest plugin useful to test tox itself (and its plugins)."""
+
 from __future__ import annotations
 
 import inspect
@@ -15,7 +16,7 @@ from types import ModuleType, TracebackType
 from typing import TYPE_CHECKING, Any, Callable, Iterator, Protocol, Sequence, cast
 
 import pytest
-from _pytest.fixtures import SubRequest
+from _pytest.fixtures import SubRequest  # noqa: PLC2701
 from devpi_process import IndexServer
 from virtualenv.info import fs_supports_symlink
 
@@ -52,7 +53,7 @@ if fs_supports_symlink():  # pragma: no cover # used to speed up test suite run 
 
 
 @pytest.fixture(autouse=True)
-def ensure_logging_framework_not_altered() -> Iterator[None]:  # noqa: PT004
+def ensure_logging_framework_not_altered() -> Iterator[None]:
     before_handlers = list(LOGGER.handlers)
     yield
     LOGGER.handlers = before_handlers
@@ -108,14 +109,14 @@ def check_os_environ() -> Iterator[None]:
 
 
 @pytest.fixture(autouse=True)
-def check_os_environ_stable(monkeypatch: pytest.MonkeyPatch) -> Iterator[None]:  # noqa: PT004
+def check_os_environ_stable(monkeypatch: pytest.MonkeyPatch) -> Iterator[None]:
     with check_os_environ():
         yield
         monkeypatch.undo()
 
 
 @pytest.fixture(autouse=True)
-def no_color(monkeypatch: pytest.MonkeyPatch, check_os_environ_stable: None) -> None:  # noqa: ARG001, PT004
+def no_color(monkeypatch: pytest.MonkeyPatch, check_os_environ_stable: None) -> None:  # noqa: ARG001
     monkeypatch.setenv("NO_COLOR", "yes")
 
 
@@ -159,7 +160,7 @@ class ToxProject:
                 msg = f"could not handle {at_path / key} with content {value!r}"  # pragma: no cover
                 raise TypeError(msg)  # pragma: no cover
 
-    def patch_execute(self, handle: Callable[[ExecuteRequest], int | None]) -> MagicMock:  # noqa: C901
+    def patch_execute(self, handle: Callable[[ExecuteRequest], int | None] | None = None) -> MagicMock:  # noqa: C901
         class MockExecute(Execute):
             def __init__(self, colored: bool, exit_code: int) -> None:  # noqa: FBT001
                 self.exit_code = exit_code
@@ -186,14 +187,14 @@ class ToxProject:
             def wait(self, timeout: float | None = None) -> int | None:  # noqa: ARG002
                 return self._exit_code
 
-            def write_stdin(self, content: str) -> None:  # noqa: ARG002
+            def write_stdin(self, content: str) -> None:  # noqa: ARG002, PLR6301
                 return None  # pragma: no cover
 
-            def interrupt(self) -> None:
+            def interrupt(self) -> None:  # noqa: PLR6301
                 return None  # pragma: no cover
 
         class MockExecuteInstance(ExecuteInstance):
-            def __init__(  # noqa: PLR0913
+            def __init__(
                 self,
                 request: ExecuteRequest,
                 options: ExecuteOptions,
@@ -227,7 +228,7 @@ class ToxProject:
             request: ExecuteRequest,
             show: bool,  # noqa: FBT001
         ) -> Iterator[ExecuteStatus]:
-            exit_code = handle(request)
+            exit_code = 0 if handle is None else handle(request)
             if exit_code is not None:
                 executor = MockExecute(colored=executor._colored, exit_code=exit_code)  # noqa: SLF001
             with original_execute_call(self, executor, out_err, request, show) as status:
@@ -258,7 +259,10 @@ class ToxProject:
         finally:
             os.chdir(cur_dir)
 
-    def run(self, *args: str, from_cwd: Path | None = None) -> ToxRunOutcome:
+    def run(self, *args: str, from_cwd: Path | None = None, raise_on_config_fail: bool = True) -> ToxRunOutcome:
+        if raise_on_config_fail and args and args[0] in {"c", "config"}:
+            self.monkeypatch.setenv("_TOX_SHOW_CONFIG_RAISE", "1")
+
         with self.chdir(from_cwd):
             state = None
             self._capfd.readouterr()  # start with a clean state - drain
@@ -287,21 +291,21 @@ class ToxProject:
                     msg = "exit code not set"
                     raise RuntimeError(msg)
             out, err = self._capfd.readouterr()
-            return ToxRunOutcome(args, self.path, cast(int, code), out, err, state)
+            return ToxRunOutcome(args, self.path, cast("int", code), out, err, state)
 
     def __repr__(self) -> str:
         return f"{type(self).__name__}(path={self.path}) at {id(self)}"
 
 
 @pytest.fixture(autouse=True, scope="session")
-def enable_pep517_backend_coverage() -> Iterator[None]:  # noqa: PT004
+def enable_pep517_backend_coverage() -> Iterator[None]:
     try:
-        import coverage  # noqa: F401
+        import coverage  # noqa: F401, PLC0415
     except ImportError:  # pragma: no cover
         yield  # pragma: no cover
         return  # pragma: no cover
     # the COV_ env variables needs to be passed on for the PEP-517 backend
-    from tox.tox_env.python.virtual_env.package.pyproject import Pep517VirtualEnvPackager
+    from tox.tox_env.python.virtual_env.package.pyproject import Pep517VirtualEnvPackager  # noqa: PLC0415
 
     def default_pass_env(self: Pep517VirtualEnvPackager) -> list[str]:
         result = previous(self)
@@ -390,7 +394,7 @@ class ToxRunOutcome:
     @staticmethod
     def matches(pattern: str, text: str, flags: int = 0) -> None:
         try:
-            from re_assert import Matches
+            from re_assert import Matches  # noqa: PLC0415
         except ImportError:  # pragma: no cover # hard to test
             match = re.match(pattern, text, flags)
             if match is None:
@@ -406,8 +410,7 @@ class ToxProjectCreator(Protocol):
         files: dict[str, Any],
         base: Path | None = None,
         prj_path: Path | None = None,
-    ) -> ToxProject:
-        ...
+    ) -> ToxProject: ...
 
 
 @pytest.fixture(name="tox_project")
@@ -424,7 +427,7 @@ def init_fixture(
     return _init
 
 
-@pytest.fixture()
+@pytest.fixture
 def empty_project(tox_project: ToxProjectCreator, monkeypatch: pytest.MonkeyPatch) -> ToxProject:
     project = tox_project({"tox.ini": ""})
     monkeypatch.chdir(project.path)
@@ -482,10 +485,10 @@ def pypi_server(tmp_path_factory: pytest.TempPathFactory) -> Iterator[IndexServe
 
 
 @pytest.fixture(scope="session")
-def _invalid_index_fake_port() -> int:  # noqa: PT005
+def _invalid_index_fake_port() -> int:
     with closing(socket.socket(socket.AF_INET, socket.SOCK_STREAM)) as socket_handler:
         socket_handler.bind(("", 0))
-        return cast(int, socket_handler.getsockname()[1])
+        return cast("int", socket_handler.getsockname()[1])
 
 
 @pytest.fixture(autouse=True)
@@ -527,12 +530,12 @@ MonkeyPatch = pytest.MonkeyPatch
 __all__ = (
     "CaptureFixture",
     "LogCaptureFixture",
-    "TempPathFactory",
     "MonkeyPatch",
     "SubRequest",
-    "ToxRunOutcome",
+    "TempPathFactory",
     "ToxProject",
     "ToxProjectCreator",
+    "ToxRunOutcome",
     "check_os_environ",
     "register_inline_plugin",
 )

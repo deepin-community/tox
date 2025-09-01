@@ -27,6 +27,7 @@ def tox_add_option(parser: ToxParser) -> None:
         "quickstart_root",
         metavar="root",
         default=Path().absolute(),
+        nargs="?",
         help="folder to create the tox.ini file",
         type=Path,
     )
@@ -42,7 +43,7 @@ def quickstart(state: State) -> int:
     text = f"""
         [tox]
         env_list =
-            py{''.join(str(i) for i in sys.version_info[0:2])}
+            py{"".join(str(i) for i in sys.version_info[0:2])}
         minversion = {version}
 
         [testenv]
